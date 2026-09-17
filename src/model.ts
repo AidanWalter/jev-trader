@@ -44,13 +44,13 @@ const QUESTIONS = {
     type: "choice",
     instructions: {
       question: "Will MON be higher or lower than the current mid after `horizonBlocks` more blocks?",
-      goal: "Trade MON-USDC on Kuru. Blocks are ~300ms; `horizonBlocks` (~30 s) is the horizon. A decision is made every few blocks and held until the next one. The trade crosses the spread (`spreadBps`), so the move must beat that cost.",
-      timing: "The order executes as an immediate-or-cancel market order in the next block.",
+      goal: "Trade MON-USDC on Kuru. Blocks are ~300ms; `horizonBlocks` (~30 s) is the horizon. Every block posts one post-only limit order on the side you pick, one tick inside the touch, and cancels the order that was resting before it. A post-only order never crosses: it EARNS the spread (`spreadBps`) when a taker hits it instead of paying it. The danger is the opposite of a market order: being filled just before the mid moves against the position.",
+      timing: "The order rests on the book from the next block and is replaced the block after, so it lives about one block unless a taker hits it first. Post-only means it is filled only when somebody else takes it.",
       inputs: "Taker flow is the strongest signal: `trades.cvdMon` (taker buys minus taker sells over the horizon), `trades.lastSide` and `recentTrades` show who is hitting the book. `depth` and `book` show resting liquidity per side at several distances from mid; thin depth on one side means price moves easily that way. `returnsBps` and `recentMids` show the path over the horizon. If `allowed.buy` is false the trade will be a sell regardless, and vice versa.",
     },
     criteria: {
-      buy: "Buy MON now: mid more likely to be higher after `horizonBlocks` blocks, by more than the spread.",
-      sell: "Sell MON now: mid more likely to be lower after `horizonBlocks` blocks, by more than the spread.",
+      buy: "Buy MON now: mid more likely to be higher after `horizonBlocks` blocks, so a resting bid gets filled and the position can be sold higher later. Not being filled costs nothing; being filled and then watching the mid fall is the loss.",
+      sell: "Sell MON now: mid more likely to be lower after `horizonBlocks` blocks, so a resting ask gets filled and the position can be bought back lower later. Not being filled costs nothing; being filled and then watching the mid rise is the loss.",
     },
   },
 } as const;

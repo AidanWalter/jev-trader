@@ -1,3 +1,4 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
 import * as Kuru from "@kuru-labs/kuru-sdk";
 import OrderBookAbi from "@kuru-labs/kuru-sdk/abi/OrderBook.json";
@@ -62,6 +63,31 @@ const gwei = (n: number) => ethers.utils.parseUnits(String(n), "gwei");
 const BN = ethers.BigNumber;
 const ZERO_ADDRESS = ethers.constants.AddressZero;
 
+/**
+ * Order ids we placed and believe are still on the book. Written every time our set of resting
+ * orders changes, read once at startup: a process that dies leaves its orders resting, and their
+ * margin stays locked until somebody cancels them.
+ */
+const ORDERS_FILE = "data/open-orders.json";
+
+export function readSavedOrders(): number[] {
+  try {
+    const raw = JSON.parse(readFileSync(ORDERS_FILE, "utf8")) as { orders?: unknown };
+    return Array.isArray(raw.orders) ? raw.orders.filter((x): x is number => Number.isInteger(x) && (x as number) > 0) : [];
+  } catch {
+    return []; // no file yet, or a partial write from a crash
+  }
+}
+
+export function saveSavedOrders(ids: number[]) {
+  try {
+    mkdirSync("data", { recursive: true });
+    writeFileSync(ORDERS_FILE, JSON.stringify({ orders: ids, at: Date.now() }) + "\n");
+  } catch {
+    // losing this file only costs a manual reconciliation, never a crash
+  }
+}
+
 interface Pending { block: number; quote: Quote; gasLimit: ethers.BigNumber }
 
 /** Kuru MON-USDC market: read the book, post one limit order per block, confirm asynchronously. */
@@ -90,8 +116,83 @@ export class Market {
     await this.refresh();
     if (!this.wallet) return;
     await this.resyncNonce();
-    await this.ensureMargin();
     await this.initGasLimit();
+    await this.reconcile(); // cancel what a previous run left on the book, before topping up margin
+    await this.ensureMargin();
+  }
+
+  /**
+   * Startup safety: anything this wallet left resting on the book is still live and still holding
+   * margin. Read back the ids we saved, ask the contract which ones are really open, cancel them in
+   * one transaction, then forget them. A dry run never has orders to reconcile.
+   */
+  async reconcile(): Promise<number> {
+    if (!this.wallet) return 0;
+    const saved = readSavedOrders();
+    if (!saved.length) return 0;
+    const me = this.wallet.address.toLowerCase();
+    const live: number[] = [];
+    for (const id of saved) {
+      try {
+        const o = await this.readOrder(id);
+        if (o && o.owner.toLowerCase() === me && o.size > 0) live.push(id);
+      } catch {
+        // a read failure must not block startup; the id stays in the file for the next attempt
+      }
+    }
+    if (!live.length) {
+      saveSavedOrders([]);
+      return 0;
+    }
+    console.log(`startup: ${live.length} order(s) from a previous run are still on the book, canceling ${live.join(", ")}`);
+    try {
+      await this.cancelOrders(live);
+      saveSavedOrders([]);
+      console.log("startup: canceled, margin released");
+    } catch (e) {
+      console.warn(`startup: cancel failed (${(e as Error).message.slice(0, 140)}); the ids stay in ${ORDERS_FILE} for the next run`);
+    }
+    return live.length;
+  }
+
+  /** One order as the book holds it. size is in size units; owner is the order's owner. */
+  async readOrder(id: number): Promise<{ owner: string; size: number; isBuy: boolean; price: number } | null> {
+    const data = this.iface.encodeFunctionData("s_orders", [BN.from(id)]);
+    const res = await rpc<string>("eth_call", [{ to: config.market, data }, "latest"], config.readRpcUrl);
+    if (!res || res === "0x") return null;
+    const o = this.iface.decodeFunctionResult("s_orders", res);
+    return {
+      owner: o.ownerAddress as string,
+      size: Number(o.size.toString()),
+      isBuy: o.isBuy as boolean,
+      price: Number(o.price.toString()),
+    };
+  }
+
+  /**
+   * Cancel orders in one transaction and wait for the receipt (startup only, never the hot loop).
+   * `batchCancelOrders` is used instead of `batchUpdate` because a batch with no new order to place
+   * has nothing to say about post-only pricing.
+   */
+  private async cancelOrders(ids: number[], tries = 60): Promise<void> {
+    const tx = {
+      type: 2, chainId: config.chainId, to: config.market, nonce: this.nonce, gasLimit: this.gasLimit,
+      maxFeePerGas: gwei(config.maxFeeGwei), maxPriorityFeePerGas: gwei(config.priorityFeeGwei),
+      data: this.iface.encodeFunctionData("batchCancelOrders", [ids.map((id) => BN.from(id))]),
+      value: BN.from(0),
+    };
+    const signed = await this.wallet!.signTransaction(tx);
+    const hash = await rpc<string>("eth_sendRawTransaction", [signed]);
+    this.nonce++;
+    for (let i = 0; i < tries; i++) {
+      const receipt = await rpc<any>("eth_getTransactionReceipt", [hash]).catch(() => null);
+      if (receipt) {
+        if (receipt.status === "0x0") throw new Error(`cancel tx reverted (${hash})`);
+        return;
+      }
+      await Bun.sleep(500);
+    }
+    throw new Error(`cancel tx still pending after ${tries} polls (${hash})`);
   }
 
   /** Every `config.refreshBlocks`: fee estimate, margin balances, and whether the Kuru AMM vault went live. */

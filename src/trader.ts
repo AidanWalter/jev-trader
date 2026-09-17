@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { config } from "./config";
-import { Market, type Book, type Fill, type Quote, type QuoteResult, type Side } from "./market";
+import { Market, saveSavedOrders, type Book, type Fill, type Quote, type QuoteResult, type Side } from "./market";
 import type { Action, Decision, Model, TradeState } from "./model";
 import { TradeFeed, type MakerFill, type TradePrint } from "./trades";
 
@@ -143,9 +143,19 @@ export class Trader {
     if (quote.status === "reverted") this.totals.reverted++;
     for (const id of canceled) this.orders.delete(id);
     if (quote.status === "placed" && quote.orderId !== null) this.orders.set(quote.orderId, { side: quote.side, price: quote.price, size: quote.size, block });
+    this.persistOrders();
     const e = this.history.find((h) => h.block === block);
     if (e) e.quote = quote;
     this.onQuote(block, quote);
+  }
+
+  /**
+   * Mirror the live order ids to disk so a restart can cancel whatever we left resting. Simulated
+   * orders carry negative ids and never exist on-chain, so they are not written.
+   */
+  private persistOrders() {
+    if (!this.market.wallet) return;
+    saveSavedOrders([...this.orders.keys()].filter((id) => id > 0));
   }
 
   /** After each trade-log poll: apply our maker fills (live) or simulate them against the new prints (dry run). */
@@ -153,6 +163,7 @@ export class Trader {
     if (!this.trades) return;
     const prints = this.trades.drainPrints();
     const fills: Fill[] = this.market.wallet ? this.liveFills(this.trades.drainFills()) : this.simFills(prints);
+    if (this.market.wallet && fills.length) this.persistOrders(); // a fill shrank or removed a resting order
     if (!fills.length) return;
     const byBlock = new Map<number, Fill[]>();
     for (const f of fills) {
