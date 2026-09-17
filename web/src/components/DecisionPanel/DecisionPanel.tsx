@@ -58,6 +58,10 @@ export default function DecisionPanel({ latest }: DecisionPanelProps) {
 
   const probs = decision?.probabilities ?? { buy: 0, sell: 0, hold: 0 };
   const decided = decision !== null && !late && chosen !== null;
+  // The second question the model answers in the same call: how likely is a move bigger than the
+  // spread. High means a resting quote is exposed to being filled right before the price runs.
+  const bigMove = decision?.bigMove ?? 0;
+  const hasBigMove = typeof decision?.bigMove === "number" && decision.bigMove > 0;
   const pctOf = (p: number) => (decided ? fmtPct(p) : "-");
 
   const headline = chosen ? (chosen === "buy" ? "BUY" : "SELL") : "LATE";
@@ -104,6 +108,14 @@ export default function DecisionPanel({ latest }: DecisionPanelProps) {
           value={probs.sell}
           fill={chosen === "sell" ? "var(--sell-bar)" : "var(--sell-bar-dim)"}
           pct={pctOf(probs.sell)}
+        />
+        <BarRow
+          label="big move"
+          labelColor="var(--muted)"
+          active={false}
+          value={bigMove}
+          fill="var(--hold-cell)"
+          pct={hasBigMove && !late ? fmtPct(bigMove) : "-"}
         />
       </section>
     </div>

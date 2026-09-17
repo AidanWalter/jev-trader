@@ -55,6 +55,7 @@ Note: port 3000 is usually taken by other projects, so the brain uses 3100 and t
 | --- | --- |
 | **block** | the tick number of the chain clock. It grows by itself, one every ~0.3 s. |
 | **buy % / sell %** | how convinced Jev is of one direction. 100% = certain, 50% = undecided. |
+| **big move** | Jev's estimate of the chance that the price travels further than the spread. High means a resting order is exposed to being filled right before the price runs away. |
 | **latency** | how long Jev took to answer, in milliseconds. |
 | **late** | the tick went by while Jev was still thinking: nothing was done that round. |
 | **spread** | the distance between the lowest price somebody sells at and the highest price somebody buys at. It is the theoretical maximum earning of one trade. |
@@ -143,9 +144,27 @@ program does not know its number: check it by hand from the website.
 bun run scripts/bench-jev.ts          # how fast Jev is and what each answer costs
 bun run scripts/probe-jev-bias.ts     # five synthetic markets: does Jev read the data or repeat a habit
 bun run scripts/score-decisions.ts    # replays past decisions and says how many were right
+bun run scripts/analyze-session.ts    # the same decisions at several horizons, against the spread
+bun run scripts/collect-history.ts    # copies a remote run down to this machine while it happens
 bun run scripts/trades-smoke.ts       # how many trades the market saw in the last hour
 bun run scripts/bench-read.ts         # how long reading the prices takes
 ```
 
 `score-decisions.ts` is the important one: it says whether Jev has real judgement or is guessing.
 Until that number is good, no amount of money is worth risking.
+
+## What the first full measurement found
+
+On one 45 minute session (4,006 decisions) the direction called by Jev was right **47 to 51% of the
+time at every horizon**, once windows where the price did not move at all are set aside. That is a
+coin flip. Its confidence was no help either: the calls it was 90-100% sure about were right 41% of
+the time in one window and 88% in another.
+
+The reason is arithmetic, not intelligence. At the speed the bot works, the price moves 0.43 bps
+while the spread is 4.5 bps: the thing to predict is ten times smaller than the cost of entering.
+And a full round trip earns 3.6 bps of spread against 3.6 bps of gas for the two blocks it needs.
+
+So the honest summary: the demo proves a model can decide and move real money every 300 ms, it does
+not prove that it can make money. For that, the structure would have to change (orders that rest
+longer, bigger orders, or a market whose spread is wide compared with its costs) and the model would
+need a signal that survives being measured.

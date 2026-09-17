@@ -4,7 +4,7 @@ export type Side = "buy" | "sell";
 export interface Quote { side: Side; price: number; size: number; txHash: string | null; gasMon: number; cancel: number[]; status: "sent" | "placed" | "reverted" | "lost" | "sim"; orderId: number | null; capped: boolean }
 /** A taker hit one of our resting orders. */
 export interface Fill { side: Side; size: number; price: number; txHash: string | null; orderId: number; simulated: boolean }
-export interface Decision { action: Action; probabilities: { buy: number; sell: number; hold: number }; upIn10: number; latencyMs: number; late: boolean }
+export interface Decision { action: Action; probabilities: { buy: number; sell: number; hold: number }; upIn10: number; /** chance the mid travels further than the spread within the horizon; absent on old events */ bigMove?: number; latencyMs: number; late: boolean }
 export interface Position { side: "long" | "short" | "flat"; size: number; entryPrice: number | null; unrealizedUsd: number; unrealizedMon: number }
 export interface Totals { blocks: number; decisions: number; quotes: number; fills: number; reverted: number; lateBlocks: number; jevUsd: number; gasMon: number; gasUsd: number; realizedUsd: number; pnlUsd: number; pnlMon: number; pnlPct: number }
 export interface BlockEvent { block: number; ts: number; mid: number; bestBid: number; bestAsk: number; spreadBps: number; decision: Decision | null; quote: Quote | null; fill: Fill | null; resting: { bidMon: number; askMon: number }; position: Position; totals: Totals }

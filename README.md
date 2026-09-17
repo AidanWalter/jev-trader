@@ -110,7 +110,9 @@ this in plainer words.
 
 ## Measuring the model, not just the code
 
-    bun run scripts/score-decisions.ts   # hit rate, called-side bps and baselines from data/events.jsonl
+    bun run scripts/score-decisions.ts   # hit rate, called-side bps, baselines and accuracy by confidence
+    bun run scripts/analyze-session.ts   # the same decisions across several horizons, against the spread
+    bun run scripts/collect-history.ts   # mirror a remote run into a local jsonl while it happens
     bun run scripts/bench-jev.ts         # latency and tokens per call, full vs trimmed payload
     bun run scripts/probe-jev-bias.ts    # five synthetic markets: does Jev read the data or repeat a habit
 
@@ -120,6 +122,45 @@ Decisions overlap in time, so a few hundred of them are worth far fewer independ
 they look. `probe-jev-bias.ts` is the controlled check: the same question against markets that differ
 only in trend strength, which is what a change to the question text in `src/model.ts` should be
 measured with.
+
+## What a measured session said
+
+One 45 minute dry run on the US server: 5,360 block events, 4,006 decisions, 14% of blocks late. This
+is the question the demo is really asking, and the answer was not the flattering one.
+
+| horizon | scored | windows with no move | right | **right when it moved** | called side | always buy | mean abs move | move / spread |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 block | 4,005 | 74% | 13% | **48%** | 0.00 bps | -0.01 | 0.43 bps | 0.10x |
+| 5 | 4,002 | 42% | 28% | **48%** | +0.02 bps | -0.05 | 1.14 bps | 0.25x |
+| 10 | 3,998 | 30% | 33% | **47%** | -0.04 bps | -0.10 | 1.76 bps | 0.39x |
+| 25 | 3,984 | 16% | 40% | **48%** | +0.04 bps | -0.19 | 3.05 bps | 0.68x |
+| 50 | 3,964 | 7% | 45% | **48%** | +0.29 bps | -0.38 | 4.85 bps | 1.08x |
+| 100 | 3,920 | 2% | 50% | **51%** | +0.10 bps | -0.74 | 7.73 bps | 1.72x |
+
+Two things fall out of that table. The direction is a coin flip at every horizon the model is asked
+about: 47 to 51% on four thousand decisions, with a called-side return indistinguishable from zero.
+The "right" column looks terrible at short horizons only because the mid usually does not move at all
+(74% of one-block windows), which is not a wrong call, it is a window with nothing to call.
+
+And the structure cannot pay whatever the model says: at the horizon where the bot actually operates,
+the mid travels 0.43 bps while the spread is 4.5 bps, and a full round trip captures
+`spread - 2 ticks` = 3.6 bps against 3.6 bps of gas for the two blocks it takes. There is no
+directional signal to find at that speed, and nothing left over once it is found.
+
+The confidence analysis says the same thing from another angle: calls the model made with 90-100%
+confidence, 58% of all of them, were right 41% of the time in one window and 88% in another. Two
+windows, opposite answers, no usable information in the number.
+
+## The adverse selection question
+
+A maker's real risk is not being wrong about direction, it is being filled just before the price
+runs. `src/model.ts` therefore asks a second question in the same request, at the cost of about 5%
+more tokens: P(the mid moves further than the current spread within the horizon). It is a TypeSafe
+`boolean` primitive, so the answer is a probability rather than a choice.
+
+`MAX_BIG_MOVE` (default `1`) is the gate: with it at 1 the signal is recorded and acted on with
+nothing. When a measured run says the answer is worth trusting, set it to a threshold like `0.6` and
+the bot stops quoting while a big move is likely. Measure first, then act.
 
 ## Leaving the book clean
 

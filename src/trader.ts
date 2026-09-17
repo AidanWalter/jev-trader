@@ -11,7 +11,7 @@ export interface BlockEvent {
   bestBid: number;
   bestAsk: number;
   spreadBps: number;
-  decision: { action: Action; probabilities: Record<Action, number>; upIn10: number; latencyMs: number; late: boolean } | null;
+  decision: { action: Action; probabilities: Record<Action, number>; upIn10: number; bigMove: number; latencyMs: number; late: boolean } | null;
   /** The order this block put on the book. */
   quote: Quote | null;
   /** Maker fills that landed in this block (aggregated), attached when the trade logs for it arrive. */
@@ -110,7 +110,10 @@ export class Trader {
       this.totals.jevUsd += (decision.inputTokens / 1e6) * config.jevUsdPerMTok;
 
       let quote: Quote | null = null;
-      if (side) {
+      // The gate is off by default (maxBigMove 1): the signal is recorded, and acted on only when a
+      // measured run says it is worth acting on.
+      const tooWild = decision.bigMove > config.maxBigMove;
+      if (side && !tooWild) {
         decision.action = side;
         const cancel = [...this.orders.keys()].filter((id) => id > 0); // simulated orders have negative ids
         quote = await this.market.send(block, side, config.tradeSizeMon, book, cancel, side !== wanted);
@@ -286,8 +289,8 @@ export class Trader {
     const event: BlockEvent = {
       block, ts: Date.now(), mid: book.mid, bestBid: book.bid, bestAsk: book.ask, spreadBps: round(book.spreadBps, 2),
       decision: late
-        ? { action: "hold", probabilities: { buy: 0, sell: 0, hold: 1 }, upIn10: 0.5, latencyMs: 0, late: true }
-        : decision && { action: decision.action, probabilities: decision.probabilities, upIn10: decision.upIn10, latencyMs: Math.round(decision.latencyMs), late: false },
+        ? { action: "hold", probabilities: { buy: 0, sell: 0, hold: 1 }, upIn10: 0.5, bigMove: 0, latencyMs: 0, late: true }
+        : decision && { action: decision.action, probabilities: decision.probabilities, upIn10: decision.upIn10, bigMove: round(decision.bigMove, 3), latencyMs: Math.round(decision.latencyMs), late: false },
       quote,
       fill: null,
       resting: { bidMon: round(this.restingMon("buy"), 1), askMon: round(this.restingMon("sell"), 1) },

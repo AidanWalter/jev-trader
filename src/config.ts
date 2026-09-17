@@ -28,6 +28,11 @@ export const config = {
   pendingBlocks: 10, // give up on a tx with no receipt after this many blocks
   refreshBlocks: 200, // how often to refresh the fee estimate, margin balances and the vault check
   horizonBlocks: Number(env("HORIZON_BLOCKS", "100")), // the model is asked about the move over this many blocks (~30 s)
+  /**
+   * Skip the quote when the model puts more than this probability on a move larger than the spread.
+   * 1 disables the gate: the signal is recorded but acted on with nothing. Measure first, then set it.
+   */
+  maxBigMove: Number(env("MAX_BIG_MOVE", "1")),
   model: env("MODEL", "mock") as "mock" | "jev",
   jevModelId: env("JEV_MODEL_ID", "jev-latest")!,
   jevUsdPerMTok: 0.042,

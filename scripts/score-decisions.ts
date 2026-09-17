@@ -13,11 +13,15 @@
  * Blocks with no event (the model was late) leave gaps in the mid series; returns are measured
  * between the recorded events that bracket `block + horizon`, so the horizon can be slightly long.
  *
- *   bun run scripts/score-decisions.ts [horizonBlocks]
+ *   bun run scripts/score-decisions.ts [horizonBlocks] [file]
+ *
+ * `file` defaults to `data/events.jsonl` (a local run). Point it at `data/server-events.jsonl` to
+ * score what `collect-history.ts` pulled down from a deployed bot.
  */
 import { config } from "../src/config";
 
 const horizon = Number(process.argv[2] ?? config.horizonBlocks);
+const file = process.argv[3] ?? "data/events.jsonl";
 
 type Action = "buy" | "sell" | "hold";
 interface Event {
@@ -28,7 +32,7 @@ interface Event {
   totals?: { gasMon: number };
 }
 
-const text = await Bun.file("data/events.jsonl").text();
+const text = await Bun.file(file).text();
 const events: Event[] = [];
 for (const line of text.split("\n")) {
   if (!line.trim()) continue;
@@ -40,7 +44,7 @@ for (const line of text.split("\n")) {
 }
 events.sort((a, b) => a.block - b.block);
 if (events.length < 3) {
-  console.error("not enough events in data/events.jsonl");
+  console.error(`not enough events in ${file}`);
   process.exit(1);
 }
 
@@ -80,6 +84,15 @@ for (const [i, run] of runs.entries()) {
     calls.push({ callBps, buyBps: moveBps, prob: e.decision!.probabilities[e.decision!.action] ?? 0 });
   }
 
+  /** Accuracy by how sure the model said it was. If the buckets all look the same, confidence means nothing. */
+  const buckets: [string, number, number][] = [["50-60%", 0.5, 0.6], ["60-70%", 0.6, 0.7], ["70-80%", 0.7, 0.8], ["80-90%", 0.8, 0.9], ["90-100%", 0.9, 1.01]];
+  const byConfidence = buckets.map(([label, lo, hi]) => {
+    const inBucket = calls.filter((c) => c.prob >= lo && c.prob < hi);
+    const right = inBucket.filter((c) => c.callBps > 0).length;
+    const mean = inBucket.length ? inBucket.reduce((a, c) => a + c.callBps, 0) / inBucket.length : 0;
+    return { label, n: inBucket.length, hit: inBucket.length ? (right / inBucket.length) * 100 : 0, mean };
+  }).filter((b) => b.n > 0);
+
   const buys = decided.filter((e) => e.decision!.action === "buy").length;
   const hits = calls.filter((c) => c.callBps > 0).length;
   const call = stats(calls.map((c) => c.callBps));
@@ -105,5 +118,6 @@ for (const [i, run] of runs.entries()) {
   console.log(`  hit rate       ${((hits / calls.length) * 100).toFixed(1)}%`);
   console.log(`  called side    mean ${f(call.mean)} bps · median ${f(call.median)} · p25 ${f(call.p25)} · p75 ${f(call.p75)}`);
   console.log(`  always buy     mean ${f(flat.mean)} bps · always sell ${f(-flat.mean)} bps`);
+  for (const b of byConfidence) console.log(`  said ${b.label.padEnd(8)} ${String(b.n).padStart(4)} decisions · right ${b.hit.toFixed(0)}% · mean ${f(b.mean)} bps`);
   console.log(`  gas per block  ${gasMon.toFixed(6)} MON (${gasLabel}) = ${((gasMon / config.tradeSizeMon) * 10_000).toFixed(2)} bps of a ${config.tradeSizeMon} MON order\n`);
 }

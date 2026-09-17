@@ -30,6 +30,12 @@ export interface Decision {
   action: Action;
   probabilities: Record<Action, number>;
   upIn10: number;
+  /**
+   * Model-estimated chance that the mid travels further than the current spread within the horizon.
+   * A resting quote is filled exactly when somebody takes it, and a move larger than the spread
+   * right after a fill is what turns a maker's earned spread into a loss.
+   */
+  bigMove: number;
   latencyMs: number;
   inputTokens: number;
 }
@@ -53,6 +59,18 @@ const QUESTIONS = {
       sell: "Sell MON now: mid more likely to be lower after `horizonBlocks` blocks, so a resting ask gets filled and the position can be bought back lower later. Not being filled costs nothing; being filled and then watching the mid rise is the loss.",
     },
   },
+  /**
+   * Asked in the same request as the direction (one round trip, one bill): the adverse selection
+   * question. `boolean` is a native TypeSafe primitive and returns P(true) directly.
+   */
+  bigMove: {
+    type: "boolean",
+    instructions: {
+      question: "Will the mid move by more than `spreadBps` in either direction within the next `horizonBlocks` blocks?",
+      goal: "Answer P(true) as a probability, not as confidence. This is the adverse selection question for a resting quote: a fill followed by a move bigger than the spread is a loss, however good the direction looked.",
+      inputs: "`returnsBps` and `recentMids` show how far the mid has been travelling lately; `trades` shows how aggressive the takers are; `depth` and `book` show how little liquidity stands in the way. Thin depth plus heavy taker flow means a sharp move is more likely.",
+    },
+  },
 } as const;
 
 /** Real Jev via the AI SDK. Swap-in is the MODEL env var. */
@@ -64,12 +82,15 @@ export class JevModel implements Model {
     const t0 = performance.now();
     const r = await experimental_evaluate({ model: this.model, state: state as any, questions: QUESTIONS, maxRetries: 0 });
     const a = r.answers.direction;
+    if (a?.type !== "choice") throw new Error(`direction answered with ${a?.type ?? "nothing"}`);
     const p = a.probabilities ?? { buy: 0, sell: 0, [a.choice]: 1 };
     const buy = p.buy ?? 0, sell = p.sell ?? 0;
+    const sharp = r.answers.bigMove;
     return {
       action: a.choice as Action,
       probabilities: { buy, sell, hold: 0 },
       upIn10: buy,
+      bigMove: sharp?.type === "boolean" ? sharp.probability : 0,
       latencyMs: performance.now() - t0,
       inputTokens: r.usage?.inputTokens ?? 0,
     };
@@ -92,6 +113,8 @@ export class MockModel implements Model {
     return {
       action, probabilities,
       upIn10: buy,
+      // stand-in: recent travel over the spread, so the pipeline has a plausible number to carry
+      bigMove: Math.min(0.95, Math.abs(state.returnsBps.last20) / 10),
       latencyMs: performance.now() - t0,
       inputTokens: Math.round(JSON.stringify(state).length / 4),
     };
