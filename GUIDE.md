@@ -36,7 +36,7 @@ Bun is required.
 
 ```powershell
 # 1. the brain: reads the market and decides
-cd C:\Users\zinga\Desktop\dev\Jev_Trade
+cd path\to\jev-trader         # the folder where you cloned the repository
 bun run src/index.ts          # listens on http://localhost:3100
 
 # 2. the dashboard: the page you watch
