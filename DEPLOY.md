@@ -39,6 +39,22 @@ come avviare il programma. Serve solo noleggiare un computer e consegnargli la r
 
    **Non impostare `PORT`**: lo decide Railway da solo e il programma lo legge.
 
+   Railway ha un pulsante `Raw Editor` dove si incolla tutto in una volta. Copia queste righe e
+   sostituisci solo `incolla_qui_la_tua_chiave`:
+
+   ```
+   MODEL=jev
+   DRY_RUN=true
+   TYPESAFE_AI_API_KEY=incolla_qui_la_tua_chiave
+   RPC_URL=https://rpc.monad.xyz
+   READ_RPC_URL=https://rpc.monad.xyz
+   WS_URL=wss://rpc.monad.xyz
+   TRADE_SIZE_MON=200
+   MAX_POSITION_MON=400
+   MARGIN_MON=200
+   MARGIN_USDC=5
+   ```
+
 5. In `Settings` → `Region` scegli **US East (Virginia)**. È la scelta che fa la differenza.
 6. `Deploy` e guarda i log: deve comparire la riga
    `jev-trader · model=jev-latest · ... DRY RUN · ...`
