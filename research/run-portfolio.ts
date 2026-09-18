@@ -21,6 +21,13 @@ const profile = flag("profile", "full") as InputProfile;
 const cache = new JsonlSignalCache(flag("cache", "data/jev-cache.jsonl")!);
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "1000" : "1000000000")));
 const evaluator = new CachedEvaluator(createReplayEvaluator(modelName, profile), cache, maxNewEvaluations);
+const feeBps = Number(flag("fee-bps", "4"));
+const slippageBps = Number(flag("slippage-bps", "1"));
+const spreadBps = Number(flag("spread-bps", "4"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 
 const assets = alignUniverse(loadUniverse(manifest));
 const result = await replayPortfolio(assets, {
@@ -31,9 +38,9 @@ const result = await replayPortfolio(assets, {
   maxAssetExposure: Number(flag("max-asset", assets.length > 1 ? "0.35" : "1")),
   execution: {
     initialCash: Number(flag("cash", "100")),
-    feeBps: Number(flag("fee-bps", "4")),
-    slippageBps: Number(flag("slippage-bps", "1")),
-    spreadBpsFallback: Number(flag("spread-bps", "4")),
+    feeBps,
+    slippageBps,
+    spreadBpsFallback: spreadBps,
     allowShort: flag("allow-short", "true") !== "false",
   },
   policy: {
@@ -45,6 +52,7 @@ const result = await replayPortfolio(assets, {
   },
   features: {
     horizonBars: Math.max(1, Number(flag("horizon", "12"))),
+    directionThresholdBpsFloor,
   },
 });
 
