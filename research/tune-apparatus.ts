@@ -5,7 +5,7 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultPolicyConfig } from "./policy";
 import { replayBars } from "./replay";
-import { chronologicalSplit } from "./splits";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
 import type { AssetKind, PolicyConfig, ReplayMetrics } from "./types";
 import type { InputProfile } from "./profiles";
 
@@ -56,6 +56,7 @@ const bars = extname(dataFile).toLowerCase() === ".jsonl"
 if (bars.length !== pilot.dataset.bars) throw new Error("market data bar count differs from pilot summary");
 
 const split = chronologicalSplit(bars);
+const ranges = chronologicalRanges(bars);
 const cache = new JsonlSignalCache(flag("cache", "data/jev-pilot-cache.jsonl")!);
 const outPath = flag("out", "data/apparatus-selection.json")!;
 
@@ -95,10 +96,12 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
               maxTargetExposure,
               minExpectedMoveCostMultiple,
             };
-            const r = await replayBars(split.train, {
+            const r = await replayBars(bars, {
               evaluator,
               policy,
               features: { horizonBars: cell.horizonBars },
+              startIndex: Math.max(50, ranges.train.start),
+              endIndex: ranges.train.end - 2,
               decisionEveryBars: pilot.decisionEveryBars,
               execution: {
                 feeBps: pilot.execution.feeBps,
@@ -114,10 +117,12 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     }
   }
 
-  const validation = await replayBars(split.validation, {
+  const validation = await replayBars(bars, {
     evaluator,
     policy: bestTrain!.policy,
     features: { horizonBars: cell.horizonBars },
+    startIndex: ranges.validation.start,
+    endIndex: ranges.validation.end - 2,
     decisionEveryBars: pilot.decisionEveryBars,
     execution: {
       feeBps: pilot.execution.feeBps,
