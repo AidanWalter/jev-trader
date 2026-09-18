@@ -40,7 +40,7 @@ jobs:
       - name: Download verified 12-request probe cache
         uses: actions/download-artifact@v4
         with:
-          pattern: safe-jev-direction-probe-${{ inputs.probe_run_id }}
+          pattern: safe-jev-direction-probe-v1
           path: data/probe
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -61,6 +61,16 @@ jobs:
           ' data/probe/safe-direction-probe.json >/dev/null
           mkdir -p data/g2
           cp data/probe/safe-direction-cache.jsonl data/g2/safe-direction-cache.jsonl
+      - name: Refuse duplicate canary expansion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="safe-jev-direction-canary-probe-${{ inputs.probe_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate paid canary"
+            exit 1
+          fi
       - name: Paid 120-state Jev direction canary
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -81,7 +91,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: safe-jev-direction-canary-${{ github.run_id }}
+          name: safe-jev-direction-canary-probe-${{ inputs.probe_run_id }}
           path: |
             data/g2/safe-direction-cache.jsonl
             data/g2/safe-direction-canary.json
