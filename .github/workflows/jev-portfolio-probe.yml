@@ -26,7 +26,7 @@ on:
       profiles:
         description: Jev input profiles
         required: true
-        default: "technical,path,full"
+        default: "technical,path,cross,full"
       decision_every:
         description: Evaluate every N synchronized bars
         required: true
@@ -38,7 +38,7 @@ on:
       max_new_evals:
         description: Hard cap across the probe
         required: true
-        default: "36"
+        default: "48"
 
 permissions:
   contents: read
