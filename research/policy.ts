@@ -1,4 +1,4 @@
-import type { JevSignal, PolicyAction, PolicyConfig } from "./types";
+import type { JevSignal, PolicyAction, PolicyConfig, PolicyContext } from "./types";
 
 export const defaultPolicyConfig: PolicyConfig = {
   minDirectionalEdge: 0.12,
@@ -7,6 +7,7 @@ export const defaultPolicyConfig: PolicyConfig = {
   maxAdverseSelection: 0.72,
   maxTargetExposure: 1,
   minExposureChange: 0.12,
+  minExpectedMoveCostMultiple: 1.25,
   sizeScoreThresholds: [0.10, 0.22, 0.38],
 };
 
@@ -15,10 +16,16 @@ const magnitudeWeight = (signal: JevSignal) => {
   return p.tiny * 0.10 + p.small * 0.35 + p.medium * 0.65 + p.large;
 };
 
+const expectedMagnitudeMultiple = (signal: JevSignal) => {
+  const p = signal.magnitude.probabilities;
+  return p.tiny * 0.5 + p.small * 1.5 + p.medium * 3 + p.large * 6;
+};
+
 export function choosePolicyAction(
   signal: JevSignal,
   currentExposure: number,
   config: PolicyConfig = defaultPolicyConfig,
+  context?: PolicyContext,
 ): PolicyAction {
   const p = signal.direction.probabilities;
   const edge = p.long - p.short;
@@ -40,6 +47,24 @@ export function choosePolicyAction(
   }
 
   const score = Math.abs(edge) * magnitudeWeight(signal) * (1 - signal.adverseSelection);
+
+  if (context && context.estimatedRoundTripCostBps > 0) {
+    const expectedMoveBps =
+      context.directionThresholdBps *
+      expectedMagnitudeMultiple(signal) *
+      Math.abs(edge) *
+      (1 - signal.adverseSelection);
+    const required = context.estimatedRoundTripCostBps * config.minExpectedMoveCostMultiple;
+    if (expectedMoveBps < required) {
+      return {
+        kind: "hold",
+        targetExposure: currentExposure,
+        score,
+        reason: "expected move does not clear round-trip cost",
+      };
+    }
+  }
+
   const [a, b, c] = config.sizeScoreThresholds;
   const level = score < a ? 0.25 : score < b ? 0.50 : score < c ? 0.75 : 1;
   const target = Math.sign(edge) * level * config.maxTargetExposure;
