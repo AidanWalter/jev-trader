@@ -1,90 +1,15 @@
-name: jev-portfolio-sealed-test
+name: jev-portfolio-sealed-test-disabled
 
 on:
   workflow_dispatch:
-    inputs:
-      pilot_run_id:
-        description: Workflow run ID from a completed jev-portfolio-pilot run
-        required: true
-      concurrency:
-        description: Maximum concurrent Jev API calls during sealed prefetch
-        required: true
-        default: "4"
-      max_new_evals:
-        description: Hard cap on fresh Jev calls for the sealed portfolio test
-        required: true
-        default: "1000"
-      confirm:
-        description: I intend to evaluate this frozen portfolio apparatus on its sealed test exactly once
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  sealed-test:
-    if: ${{ false }}
-    if: ${{ inputs.confirm == true }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: |
-          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
-            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
-            exit 1
-          fi
-      - name: Download exact frozen portfolio pilot artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: jev-portfolio-pilot-${{ inputs.pilot_run_id }}
-          path: data
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.pilot_run_id }}
-      - name: Verify required frozen files
-        run: |
-          test -s data/market/universe/universe.json
-          test -s data/portfolio-pilot-cache.jsonl
-          test -s data/portfolio-apparatus-freeze.json
-      - name: Zero-spend portfolio sealed preflight
-        run: |
-          bun run research/portfolio-sealed-preflight.ts data/portfolio-apparatus-freeze.json \
-            --manifest=data/market/universe/universe.json \
-            --cache=data/portfolio-pilot-cache.jsonl | tee data/portfolio-sealed-preflight-rerun.txt
-      - name: Run frozen portfolio sealed test
-        run: |
-          set -o pipefail
-          bun run research/run-portfolio-sealed-test.ts data/portfolio-apparatus-freeze.json \
-            --manifest=data/market/universe/universe.json \
-            --cache=data/portfolio-pilot-cache.jsonl \
-            --max-new-evals="${{ inputs.max_new_evals }}" \
-            --concurrency="${{ inputs.concurrency }}" \
-            --out=data/portfolio-sealed-result.json | tee data/portfolio-sealed-output.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jev-portfolio-sealed-result-${{ inputs.pilot_run_id }}-${{ github.run_id }}
-          path: |
-            data/portfolio-apparatus-freeze.json
-            data/portfolio-apparatus-selection.json
-            data/portfolio-pilot-summary.json
-            data/portfolio-pilot-cache.jsonl
-            data/portfolio-sealed-preflight.txt
-            data/portfolio-sealed-preflight-rerun.txt
-            data/portfolio-sealed-output.txt
-            data/portfolio-sealed-result.json
-          retention-days: 90
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use the manually budgeted safe-jev-direction-probe workflow instead."
