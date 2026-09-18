@@ -27,6 +27,33 @@ jobs:
         run: bun run scripts/download-binance-klines.ts --symbol=BTCUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/btc.csv
       - name: Pilot matrix smoke test with mock evaluator
         run: bun run research/pilot.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=mock --horizons=6,12 --profiles=full --decision-every=8 --max-new-evals=100000 --cache=data/mock-pilot-cache.jsonl --out=data/mock-pilot-summary.json
+      - name: Mock apparatus selection
+        run: |
+          bun run research/tune-apparatus.ts data/market/btc.csv \
+            --pilot=data/mock-pilot-summary.json \
+            --cache=data/mock-pilot-cache.jsonl \
+            --grid=fast \
+            --out=data/mock-apparatus-selection.json
+      - name: Freeze mock apparatus
+        run: |
+          bun run research/freeze.ts data/market/btc.csv \
+            --policy=data/mock-apparatus-selection.json \
+            --symbol=BTCUSDT \
+            --kind=spot \
+            --out=data/mock-apparatus-freeze.json
+      - name: Mock sealed preflight
+        run: |
+          bun run research/sealed-preflight.ts data/mock-apparatus-freeze.json \
+            --data=data/market/btc.csv \
+            --cache=data/mock-pilot-cache.jsonl | tee data/mock-sealed-preflight.txt
+      - name: Mock sealed execution
+        run: |
+          set -o pipefail
+          bun run research/run-sealed-test.ts data/mock-apparatus-freeze.json \
+            --data=data/market/btc.csv \
+            --cache=data/mock-pilot-cache.jsonl \
+            --max-new-evals=100000 \
+            --out=data/mock-sealed-result.json | tee data/mock-sealed-output.txt
       - name: Momentum baseline
         run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
@@ -44,6 +71,11 @@ jobs:
             data/walk-forward.txt
             data/oracle.txt
             data/mock-pilot-summary.json
+            data/mock-apparatus-selection.json
+            data/mock-apparatus-freeze.json
+            data/mock-sealed-preflight.txt
+            data/mock-sealed-output.txt
+            data/mock-sealed-result.json
           retention-days: 14
 
   crypto-portfolio:
