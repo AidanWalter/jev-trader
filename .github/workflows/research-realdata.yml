@@ -297,8 +297,21 @@ jobs:
             data/mock-perp-live-state.json
             data/mock-perp-live-events.jsonl
             data/mock-perp-live-probe.txt
+            data/mock-hyperliquid-live-state.json
+            data/mock-hyperliquid-live-events.jsonl
           retention-days: 14
 
+      - name: Initialize read-only Hyperliquid perpetual forward-paper state
+        run: |
+          bun run research/live-frozen-hyperliquid-portfolio-paper.ts data/mock-perp-live-freeze.json \
+            --cache=data/mock-perp-live-cache.jsonl \
+            --cycles=1 \
+            --state=data/mock-hyperliquid-live-state.json \
+            --events=data/mock-hyperliquid-live-events.jsonl
+          test -s data/mock-hyperliquid-live-state.json
+          test -s data/mock-hyperliquid-live-events.jsonl
+          grep -q '"version": "frozen-hyperliquid-portfolio-paper-v1"' data/mock-hyperliquid-live-state.json
+          grep -q '"venue":"hyperliquid"' data/mock-hyperliquid-live-events.jsonl
   public-stock-portfolio:
     runs-on: ubuntu-latest
     timeout-minutes: 12
