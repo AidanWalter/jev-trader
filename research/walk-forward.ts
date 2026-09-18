@@ -98,7 +98,7 @@ for (const fold of folds) {
       policy,
       features: { horizonBars },
       startIndex: Math.max(50, fold.train.start),
-      endIndex: fold.train.end - 2,
+      endIndex: fold.train.end - horizonBars - 1,
       decisionEveryBars,
       execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
     });
@@ -110,7 +110,7 @@ for (const fold of folds) {
     policy: best!.policy,
     features: { horizonBars },
     startIndex: fold.validation.start,
-    endIndex: fold.validation.end - 2,
+    endIndex: fold.validation.end - horizonBars - 1,
     decisionEveryBars,
     execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
   });
