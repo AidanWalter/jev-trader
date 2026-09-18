@@ -96,6 +96,8 @@ export interface ExecutionConfig {
   feeBps: number;
   slippageBps: number;
   spreadBpsFallback: number;
+  /** Multiplier applied to modeled spread costs without changing the market-state feature itself. */
+  spreadCostMultiplier: number;
   maxGrossExposure: number;
   minTradeNotional: number;
   allowShort: boolean;
