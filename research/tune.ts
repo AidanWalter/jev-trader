@@ -1,7 +1,8 @@
 import { extname } from "node:path";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
-import { JevReplayEvaluator, MockReplayEvaluator } from "./evaluator";
+import { createReplayEvaluator } from "./evaluator";
+import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
 import { chronologicalSplit } from "./splits";
 import { defaultPolicyConfig } from "./policy";
@@ -22,13 +23,16 @@ if (!file) {
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
 const modelName = flag("model", "mock")!;
+const profile = flag("profile", "full") as InputProfile;
 const cache = new JsonlSignalCache(flag("cache", "data/jev-cache.jsonl")!);
-const rawEvaluator = modelName === "jev" ? new JevReplayEvaluator() : new MockReplayEvaluator();
-const evaluator = new CachedEvaluator(rawEvaluator, cache);
+const rawEvaluator = createReplayEvaluator(modelName, profile);
+const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "25000" : "1000000000")));
+const evaluator = new CachedEvaluator(rawEvaluator, cache, maxNewEvaluations);
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const horizonBars = Number(flag("horizon", "12"));
+const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
@@ -63,6 +67,7 @@ for (const minDirectionalEdge of edges) {
           evaluator,
           policy,
           features: { horizonBars },
+          decisionEveryBars,
           execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
         });
         candidates.push({ policy, trainScore: objective(r.metrics), train: r.metrics });
@@ -79,6 +84,7 @@ for (const c of finalists) {
     evaluator,
     policy: c.policy,
     features: { horizonBars },
+    decisionEveryBars,
     execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
   });
   validated.push({ ...c, validationScore: objective(r.metrics), validation: r.metrics });
@@ -87,7 +93,7 @@ validated.sort((a, b) => b.validationScore - a.validationScore);
 
 const chosen = validated[0]!;
 console.log(`model ${rawEvaluator.name} · bars train=${split.train.length} validation=${split.validation.length} sealed-test=${split.test.length}`);
-console.log(`cache ${cache.size} entries · ${cache.hits} hits · ${cache.misses} misses`);
+console.log(`profile ${profile} · every ${decisionEveryBars} bar(s) · cache ${cache.size} entries · ${cache.hits} hits · ${cache.misses} misses · ${evaluator.newEvaluations} new`);
 console.log("selected policy from train, ranked on validation:");
 console.log(JSON.stringify(chosen.policy, null, 2));
 console.log(`train return ${chosen.train.returnPct.toFixed(2)}% · DD ${chosen.train.maxDrawdownPct.toFixed(2)}% · Sharpe ${chosen.train.sharpe?.toFixed(2) ?? "n/a"}`);
