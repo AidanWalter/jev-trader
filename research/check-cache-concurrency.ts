@@ -96,7 +96,7 @@ try {
   const tokenFulfilled = tokenResults.filter((x) => x.status === "fulfilled").length;
   const tokenRejected = tokenResults.filter((x) =>
     x.status === "rejected" &&
-    String((x as PromiseRejectedResult).reason).includes("fresh-input-token budget would be exceeded")
+    String((x as PromiseRejectedResult).reason).includes("fresh-input-token reservation budget would be exceeded")
   ).length;
   check(
     "pre-call token reservations block a third concurrent spend",
