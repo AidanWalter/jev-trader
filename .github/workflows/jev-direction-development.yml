@@ -151,7 +151,7 @@ jobs:
             --cache=data/dev/jev-direction-cache.jsonl | tee data/dev/sealed-preflight.txt
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: jev-direction-development-sample-${{ inputs.sample_run_id }}
           path: |
@@ -167,3 +167,11 @@ jobs:
             data/dev/validation-audit.json
             data/dev/sealed-preflight.txt
           retention-days: 60
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-development-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
+
