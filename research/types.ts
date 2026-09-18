@@ -21,6 +21,8 @@ export interface FeatureState {
   horizonBars: number;
   price: number;
   spreadBps: number;
+  /** Absolute future return within this band is labeled flat for direction scoring. */
+  directionThresholdBps: number;
   returnsBps: { r1: number; r3: number; r12: number; r48: number };
   realizedVolBps: { v12: number; v48: number };
   rangeBps: number;
@@ -74,6 +76,7 @@ export interface FeatureConfig {
   horizonBars: number;
   minHistoryBars: number;
   spreadBpsFallback: number;
+  directionThresholdSpreadMultiple: number;
   recentPoints: number;
 }
 
