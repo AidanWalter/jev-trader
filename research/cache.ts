@@ -82,6 +82,7 @@ export class CachedEvaluator implements SignalEvaluator {
   readonly name: string;
   newEvaluations = 0;
   newInputTokens = 0;
+  private inFlight = new Map<string, Promise<JevSignal>>();
 
   constructor(
     private inner: SignalEvaluator,
@@ -94,12 +95,27 @@ export class CachedEvaluator implements SignalEvaluator {
   async evaluate(state: FeatureState): Promise<JevSignal> {
     const hit = this.cache.get(this.inner.name, state);
     if (hit) return hit;
+
+    const key = stateCacheKey(this.inner.name, this.cache.stateVersion, state);
+    const pending = this.inFlight.get(key);
+    if (pending) return pending;
+
     if (this.newEvaluations >= this.maxNewEvaluations) {
       throw new Error(`new-evaluation limit reached (${this.maxNewEvaluations}); increase --max-new-evals deliberately`);
     }
     this.newEvaluations++;
-    const signal = await this.inner.evaluate(state);
-    this.newInputTokens += signal.inputTokens;
-    return this.cache.put(this.inner.name, state, signal);
+
+    const work = (async () => {
+      const signal = await this.inner.evaluate(state);
+      this.newInputTokens += signal.inputTokens;
+      return this.cache.put(this.inner.name, state, signal);
+    })();
+    this.inFlight.set(key, work);
+
+    try {
+      return await work;
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 }
