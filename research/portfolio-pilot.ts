@@ -151,7 +151,7 @@ for (const horizonBars of horizons) {
     const missing = allDevStates.filter((x) => !cache.has(raw.name, x.state)).length;
     const remaining = Math.max(0, maxNewEvaluations - usedNewEvaluations);
 
-    if (modelName === "jev" && missing > remaining) {
+    if (paidModel && missing > remaining) {
       cells.push({
         horizonBars,
         profile,
