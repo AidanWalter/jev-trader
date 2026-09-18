@@ -1,0 +1,82 @@
+name: jev-portfolio-fresh-window
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/jev-portfolio-fresh-window.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: test -n "$TYPESAFE_AI_API_KEY"
+      - name: Download fresh non-overlapping crypto universe
+        run: |
+          bun run scripts/download-binance-universe.ts \
+            --symbols=BTCUSDT,ETHUSDT,SOLUSDT \
+            --interval=15m \
+            --start=2025-02-02 \
+            --end=2025-05-02 \
+            --out-dir=data/market/fresh-universe \
+            --manifest=data/market/fresh-universe/universe.json
+      - name: Run precommitted Jev development matrix
+        run: |
+          bun run research/portfolio-pilot.ts data/market/fresh-universe/universe.json \
+            --model=jev \
+            --require-complete-grid=true \
+            --concurrency=4 \
+            --horizons=12,24,48 \
+            --profiles=path \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --max-new-evals=8500 \
+            --cache=data/fresh-portfolio-cache.jsonl \
+            --out=data/fresh-portfolio-pilot.json
+      - name: Tune only on train and validation
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/market/fresh-universe/universe.json \
+            --pilot=data/fresh-portfolio-pilot.json \
+            --cache=data/fresh-portfolio-cache.jsonl \
+            --grid=full \
+            --out=data/fresh-portfolio-selection.json
+      - name: Freeze only if stronger qualification passes
+        run: |
+          bun run research/freeze-portfolio.ts data/market/fresh-universe/universe.json \
+            --selection=data/fresh-portfolio-selection.json \
+            --out=data/fresh-portfolio-freeze.json
+      - name: Zero-spend fresh sealed preflight
+        if: ${{ success() }}
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/fresh-portfolio-freeze.json \
+            --manifest=data/market/fresh-universe/universe.json \
+            --cache=data/fresh-portfolio-cache.jsonl | tee data/fresh-sealed-preflight.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-portfolio-fresh-window-${{ github.run_id }}
+          path: |
+            data/market/fresh-universe/
+            data/fresh-portfolio-cache.jsonl
+            data/fresh-portfolio-pilot.json
+            data/fresh-portfolio-selection.json
+            data/fresh-portfolio-freeze.json
+            data/fresh-sealed-preflight.txt
+          retention-days: 60
