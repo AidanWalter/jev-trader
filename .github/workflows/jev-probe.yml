@@ -1,0 +1,89 @@
+name: jev-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: Public Binance spot symbol
+        required: true
+        default: BTCUSDT
+      interval:
+        description: Binance kline interval
+        required: true
+        default: 15m
+      start:
+        description: Historical start date
+        required: true
+        default: "2025-01-01"
+      end:
+        description: Historical end date
+        required: true
+        default: "2025-02-01"
+      horizons:
+        description: Forecast horizons in bars
+        required: true
+        default: "6,12"
+      profiles:
+        description: Jev input profiles
+        required: true
+        default: "minimal,technical,path,full"
+      decision_every:
+        description: Evaluate every N bars
+        required: true
+        default: "4"
+      sample_per_cell:
+        description: Fresh Jev calls sampled per horizon/profile cell
+        required: true
+        default: "5"
+      max_new_evals:
+        description: Hard cap across the probe
+        required: true
+        default: "40"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: |
+          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
+            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
+            exit 1
+          fi
+      - name: Download exact public market sample
+        run: bun run scripts/download-binance-klines.ts --symbol="${{ inputs.symbol }}" --interval="${{ inputs.interval }}" --start="${{ inputs.start }}" --end="${{ inputs.end }}" --out=data/market/probe.csv
+      - name: Measure Jev tokens latency and projected pilot spend
+        run: |
+          bun run research/jev-probe.ts data/market/probe.csv \
+            --symbol="${{ inputs.symbol }}" \
+            --kind=spot \
+            --model=jev \
+            --horizons="${{ inputs.horizons }}" \
+            --profiles="${{ inputs.profiles }}" \
+            --decision-every="${{ inputs.decision_every }}" \
+            --sample-per-cell="${{ inputs.sample_per_cell }}" \
+            --max-new-evals="${{ inputs.max_new_evals }}" \
+            --cache=data/jev-probe-cache.jsonl \
+            --out=data/jev-probe-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-probe-${{ inputs.symbol }}-${{ github.run_id }}
+          path: |
+            data/market/probe.csv
+            data/jev-probe-cache.jsonl
+            data/jev-probe-summary.json
+          retention-days: 30
