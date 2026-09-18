@@ -75,6 +75,11 @@ const topNs = fast
 const maxAssets = fast
   ? [...new Set([pilot.portfolio.maxAssetExposure, Math.min(0.5, pilot.portfolio.maxGrossExposure)])]
   : [...new Set([0.2, 0.35, 0.5, pilot.portfolio.maxAssetExposure].map((x) => Math.min(x, pilot.portfolio.maxGrossExposure)))];
+const flatExits = fast ? [0.54, 0.64] : [0.50, 0.58, 0.66];
+const minChanges = fast ? [0.08, 0.18] : [0.05, 0.12, 0.20];
+const sizeThresholdSets: [number, number, number][] = fast
+  ? [[0.08, 0.20, 0.36], [0.12, 0.26, 0.44]]
+  : [[0.06, 0.16, 0.30], [0.10, 0.22, 0.38], [0.14, 0.28, 0.46]];
 
 function objective(r: PortfolioResult) {
   const ddPenalty = Math.abs(Math.min(0, r.maxDrawdownPct)) * 0.6;
@@ -164,6 +169,39 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
       }
     }
   }
+
+  let refined = best!;
+  for (const flatExitProbability of flatExits) {
+    for (const minExposureChange of minChanges) {
+      for (const sizeScoreThresholds of sizeThresholdSets) {
+        const policy: PolicyConfig = {
+          ...best!.policy,
+          flatExitProbability,
+          minExposureChange,
+          sizeScoreThresholds,
+        };
+        const train = await replayCell(
+          evaluator,
+          cell,
+          policy,
+          best!.topN,
+          best!.maxAssetExposure,
+          ranges.train,
+        );
+        const score = objective(train);
+        if (score > refined.score) {
+          refined = {
+            policy,
+            topN: best!.topN,
+            maxAssetExposure: best!.maxAssetExposure,
+            train,
+            score,
+          };
+        }
+      }
+    }
+  }
+  best = refined;
 
   const validationStress = [];
   for (const multiplier of costStressMultipliers) {
@@ -296,6 +334,7 @@ const selection = {
   sealedTestBars: split.test.length,
   chosen,
   grid,
+  policyRefinement: { flatExits, minChanges, sizeThresholdSets },
   costStressMultipliers,
   qualification: {
     passed: reasons.length === 0,
