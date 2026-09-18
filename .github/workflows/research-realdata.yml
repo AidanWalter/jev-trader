@@ -170,6 +170,16 @@ jobs:
             --cache=data/mock-portfolio-pilot-cache.jsonl \
             --max-new-evals=100000 \
             --out=data/mock-portfolio-sealed-result.json | tee data/mock-portfolio-sealed-output.txt
+      - name: Initialize frozen shared-bankroll live paper state
+        run: |
+          bun run research/live-frozen-binance-portfolio-paper.ts data/mock-portfolio-apparatus-freeze.json \
+            --cache=data/mock-portfolio-pilot-cache.jsonl \
+            --cycles=1 \
+            --state=data/mock-portfolio-live-state.json \
+            --events=data/mock-portfolio-live-events.jsonl
+          test -s data/mock-portfolio-live-state.json
+          test -s data/mock-portfolio-live-events.jsonl
+          grep -q '"version": "frozen-binance-portfolio-paper-v1"' data/mock-portfolio-live-state.json
       - name: Momentum portfolio
         run: set -o pipefail; bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
       - name: Random portfolio
@@ -186,6 +196,8 @@ jobs:
             data/mock-portfolio-sealed-preflight.txt
             data/mock-portfolio-sealed-output.txt
             data/mock-portfolio-sealed-result.json
+            data/mock-portfolio-live-state.json
+            data/mock-portfolio-live-events.jsonl
           retention-days: 14
 
   forward-paper-smoke:
