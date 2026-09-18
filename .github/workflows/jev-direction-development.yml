@@ -38,7 +38,7 @@ jobs:
       - name: Download exact verified sample artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-sample-${{ inputs.sample_run_id }}
+          pattern: jev-direction-sample-canary-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -81,6 +81,17 @@ jobs:
             --decision-every=8 \
             --tokens-per-request=2000 | tee data/dev/spend-plan.txt
           echo "Hard paid limits for the next step: 7000 fresh requests, 14,000,000 input tokens, $0.60."
+
+      - name: Refuse duplicate paid development expansion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="jev-direction-development-sample-${{ inputs.sample_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate paid development run"
+            exit 1
+          fi
 
       - name: Fill one fixed Jev development apparatus
         env:
@@ -132,7 +143,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jev-direction-development-${{ github.run_id }}
+          name: jev-direction-development-sample-${{ inputs.sample_run_id }}
           path: |
             data/dev/universe/
             data/dev/sample.json
