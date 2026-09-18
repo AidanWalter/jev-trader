@@ -61,6 +61,7 @@ function metrics(
   initialCash: number,
   fees: number,
   borrowCost: number,
+  fundingNet: number,
   episodePnls: number[],
 ): ReplayMetrics {
   const finalEquity = equity.at(-1)?.equity ?? initialCash;
@@ -99,6 +100,7 @@ function metrics(
     turnover: fills.reduce((s, f) => s + f.notional, 0) / Math.max(initialCash, 1e-9),
     fees,
     borrowCost,
+    fundingNet,
     orders: fills.length,
     roundTrips: episodePnls.length,
     wins: wins.length,
@@ -143,6 +145,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
   let quantity = 0;
   let fees = 0;
   let borrowCost = 0;
+  let fundingNet = 0;
   let episodeStart: number | null = null;
   const episodePnls: number[] = [];
   const equity: EquityPoint[] = [];
@@ -158,7 +161,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     const bar = bars[i]!;
     const next = bars[i + 1]!;
 
-    if (quantity < 0) {
+    if (quantity < 0 && bar.kind !== "perp") {
       const days = Math.max(0, next.ts - bar.ts) / 86_400_000;
       const cost = Math.abs(quantity * bar.close) * execution.shortBorrowBpsPerDay / 10_000 * days;
       cash -= cost;
@@ -166,7 +169,9 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     }
 
     if (bar.kind === "perp" && bar.fundingBps) {
-      cash -= quantity * bar.close * bar.fundingBps / 10_000;
+      const funding = -quantity * bar.open * bar.fundingBps / 10_000;
+      cash += funding;
+      fundingNet += funding;
     }
 
     if ((i - start) % decisionEveryBars !== 0) {
@@ -248,7 +253,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     symbol,
     startTs: bars[start]!.ts,
     endTs: lastBar.ts,
-    metrics: metrics(bars.slice(start, Math.min(bars.length, end + 2)), equity, fills, execution.initialCash, fees, borrowCost, episodePnls),
+    metrics: metrics(bars.slice(start, Math.min(bars.length, end + 2)), equity, fills, execution.initialCash, fees, borrowCost, fundingNet, episodePnls),
     equity,
     decisions,
   };
