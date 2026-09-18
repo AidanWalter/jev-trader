@@ -92,8 +92,9 @@ const intervalMap = new Map<number, string>([
   [60 * 60_000, "60m"],
   [90 * 60_000, "90m"],
 ]);
-const interval = flag("interval", intervalMap.get(freeze.universe.intervalMs));
-if (!interval) throw new Error("could not map frozen stock interval to Yahoo interval; pass --interval explicitly");
+const intervalCandidate = flag("interval", intervalMap.get(freeze.universe.intervalMs));
+if (!intervalCandidate) throw new Error("could not map frozen stock interval to Yahoo interval; pass --interval explicitly");
+const interval: string = intervalCandidate;
 
 const freezeHasher = new Bun.CryptoHasher("sha256");
 freezeHasher.update(freezeBytes);
