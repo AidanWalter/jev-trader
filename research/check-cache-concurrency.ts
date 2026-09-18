@@ -81,6 +81,25 @@ try {
   }
   check("hard fresh-call budget still rejects a third unique state", rejected && inner.calls === 2);
 
+  const tokenInner = new SlowEvaluator();
+  const tokenCache = new JsonlSignalCache(join(dir, "token-cache.jsonl"));
+  const tokenBudgeted = new CachedEvaluator(tokenInner, tokenCache, {
+    maxNewEvaluations: 10,
+    maxFreshInputTokens: 3_600,
+    reserveInputTokensPerEvaluation: 1_800,
+  });
+  await Promise.all([
+    tokenBudgeted.evaluate(state(10_000)),
+    tokenBudgeted.evaluate(state(11_000)),
+  ]);
+  let tokenRejected = false;
+  try {
+    await tokenBudgeted.evaluate(state(12_000));
+  } catch (e) {
+    tokenRejected = String((e as Error).message).includes("fresh-input-token budget would be exceeded");
+  }
+  check("pre-call token reservation blocks spend before a third call", tokenRejected && tokenInner.calls === 2);
+
   console.log(JSON.stringify({
     innerCalls: inner.calls,
     newEvaluations: evaluator.newEvaluations,
