@@ -53,3 +53,52 @@ export function walkForwardSplits(
   }
   return out;
 }
+
+export interface ChronologicalRanges {
+  train: { start: number; end: number };
+  validation: { start: number; end: number };
+  test: { start: number; end: number };
+}
+
+/** Half-open [start,end) ranges over the original bars, preserving pre-boundary feature history. */
+export function chronologicalRanges(
+  bars: MarketBar[],
+  fractions: SplitFractions = { train: 0.6, validation: 0.2, test: 0.2 },
+): ChronologicalRanges {
+  const total = fractions.train + fractions.validation + fractions.test;
+  if (Math.abs(total - 1) > 1e-9) throw new Error("split fractions must sum to 1");
+  if (bars.length < 10) throw new Error("not enough bars to split");
+  const trainEnd = Math.floor(bars.length * fractions.train);
+  const validationEnd = trainEnd + Math.floor(bars.length * fractions.validation);
+  return {
+    train: { start: 0, end: trainEnd },
+    validation: { start: trainEnd, end: validationEnd },
+    test: { start: validationEnd, end: bars.length },
+  };
+}
+
+export interface WalkForwardRange {
+  index: number;
+  train: { start: number; end: number };
+  validation: { start: number; end: number };
+}
+
+/** Half-open walk-forward ranges over one original bar array. */
+export function walkForwardRanges(
+  bars: MarketBar[],
+  trainBars: number,
+  validationBars: number,
+  stepBars = validationBars,
+): WalkForwardRange[] {
+  if (trainBars <= 0 || validationBars <= 0 || stepBars <= 0) throw new Error("walk-forward sizes must be positive");
+  const out: WalkForwardRange[] = [];
+  let index = 0;
+  for (let start = 0; start + trainBars + validationBars <= bars.length; start += stepBars) {
+    out.push({
+      index: index++,
+      train: { start, end: start + trainBars },
+      validation: { start: start + trainBars, end: start + trainBars + validationBars },
+    });
+  }
+  return out;
+}
