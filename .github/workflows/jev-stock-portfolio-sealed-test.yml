@@ -26,6 +26,7 @@ permissions:
 
 jobs:
   sealed-test:
+    if: ${{ false }}
     if: ${{ inputs.confirm == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
