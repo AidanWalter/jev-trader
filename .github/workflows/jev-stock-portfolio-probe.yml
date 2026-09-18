@@ -35,6 +35,10 @@ on:
         description: Evaluate every N synchronized bars
         required: true
         default: "4"
+      concurrency:
+        description: Maximum concurrent Jev API calls
+        required: true
+        default: "4"
       sample_per_cell:
         description: Fresh Jev calls sampled per horizon/profile cell
         required: true
@@ -100,6 +104,7 @@ jobs:
         run: |
           bun run research/portfolio-probe.ts data/market/stock-universe/universe.json \
             --model=jev \
+            --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
             --decision-every="${{ inputs.decision_every }}" \
