@@ -4,6 +4,7 @@ import type { FeatureState, JevSignal, SignalEvaluator } from "./types";
 
 interface CacheRecord {
   key: string;
+  namespace: string;
   stateVersion: string;
   state: FeatureState;
   signal: JevSignal;
@@ -17,9 +18,9 @@ function stable(value: unknown): string {
   return "{" + Object.keys(obj).sort().map((k) => JSON.stringify(k) + ":" + stable(obj[k])).join(",") + "}";
 }
 
-export function stateCacheKey(stateVersion: string, state: FeatureState) {
+export function stateCacheKey(namespace: string, stateVersion: string, state: FeatureState) {
   const h = new Bun.CryptoHasher("sha256");
-  h.update(stable({ stateVersion, state }));
+  h.update(stable({ namespace, stateVersion, state }));
   return h.digest("hex");
 }
 
@@ -41,8 +42,8 @@ export class JsonlSignalCache {
     }
   }
 
-  get(state: FeatureState) {
-    const key = stateCacheKey(this.stateVersion, state);
+  get(namespace: string, state: FeatureState) {
+    const key = stateCacheKey(namespace, this.stateVersion, state);
     const signal = this.records.get(key);
     if (signal) {
       this.hits++;
@@ -52,12 +53,19 @@ export class JsonlSignalCache {
     return null;
   }
 
-  put(state: FeatureState, signal: JevSignal) {
-    const key = stateCacheKey(this.stateVersion, state);
+  put(namespace: string, state: FeatureState, signal: JevSignal) {
+    const key = stateCacheKey(namespace, this.stateVersion, state);
     const stored = { ...signal, cacheKey: key };
     this.records.set(key, stored);
     mkdirSync(dirname(this.path), { recursive: true });
-    const record: CacheRecord = { key, stateVersion: this.stateVersion, state, signal: stored, createdAt: Date.now() };
+    const record: CacheRecord = {
+      key,
+      namespace,
+      stateVersion: this.stateVersion,
+      state,
+      signal: stored,
+      createdAt: Date.now(),
+    };
     appendFileSync(this.path, JSON.stringify(record) + "\n");
     return stored;
   }
@@ -76,8 +84,8 @@ export class CachedEvaluator implements SignalEvaluator {
   }
 
   async evaluate(state: FeatureState): Promise<JevSignal> {
-    const hit = this.cache.get(state);
+    const hit = this.cache.get(this.inner.name, state);
     if (hit) return hit;
-    return this.cache.put(state, await this.inner.evaluate(state));
+    return this.cache.put(this.inner.name, state, await this.inner.evaluate(state));
   }
 }
