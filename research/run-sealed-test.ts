@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
@@ -80,6 +80,7 @@ if (raw.name !== record.evaluator.namespace) {
 }
 
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "0")));
+const outPath = flag("out");
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
 const result = await replayBars(bars, {
   evaluator,
@@ -110,3 +111,19 @@ console.log("P&L $" + m.pnl.toFixed(2) + " · return " + m.returnPct.toFixed(2) 
 console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · Sharpe " + (m.sharpe === null ? "n/a" : m.sharpe.toFixed(2)) + " · turnover " + m.turnover.toFixed(1) + "x");
 console.log("orders " + m.orders + " · wins " + m.wins + " · losses " + m.losses + " · fees $" + m.fees.toFixed(4));
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
+
+if (outPath) {
+  const dir = outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : ".";
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(outPath, JSON.stringify({
+    version: "sealed-result-v1",
+    evaluatedAt: Date.now(),
+    freeze: freezePath,
+    datasetSha256: actualHash,
+    evaluatorNamespace: raw.name,
+    newEvaluations: evaluator.newEvaluations,
+    freshInputTokens: evaluator.newInputTokens,
+    result,
+  }, null, 2) + "\n");
+  console.log("wrote sealed result " + outPath);
+}
