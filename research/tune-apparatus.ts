@@ -22,6 +22,7 @@ interface PilotSummary {
   dataset: { sha256: string; bars: number };
   decisionEveryBars: number;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
+  features: { directionThresholdBpsFloor: number };
   rows: PilotRow[];
 }
 
@@ -99,7 +100,10 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
             const r = await replayBars(bars, {
               evaluator,
               policy,
-              features: { horizonBars: cell.horizonBars },
+              features: {
+                horizonBars: cell.horizonBars,
+                directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+              },
               startIndex: Math.max(50, ranges.train.start),
               endIndex: ranges.train.end - cell.horizonBars - 1,
               decisionEveryBars: pilot.decisionEveryBars,
@@ -120,7 +124,10 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
   const validation = await replayBars(bars, {
     evaluator,
     policy: bestTrain!.policy,
-    features: { horizonBars: cell.horizonBars },
+    features: {
+                horizonBars: cell.horizonBars,
+                directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+              },
     startIndex: ranges.validation.start,
     endIndex: ranges.validation.end - cell.horizonBars - 1,
     decisionEveryBars: pilot.decisionEveryBars,
@@ -163,6 +170,7 @@ const selection = {
   kind: pilot.kind,
   decisionEveryBars: pilot.decisionEveryBars,
   execution: pilot.execution,
+  features: pilot.features,
   sealedTestBars: split.test.length,
   chosen,
   candidates,
