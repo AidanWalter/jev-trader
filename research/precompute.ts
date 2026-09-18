@@ -30,6 +30,12 @@ const horizonBars = Math.max(1, Number(flag("horizon", "12")));
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "1000")));
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
+const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
+const slippageBps = Number(flag("slippage-bps", "1"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 const pricePerMTok = Number(flag("usd-per-mtok", "0.042"));
 
 const bars = extname(file).toLowerCase() === ".jsonl"
@@ -48,7 +54,7 @@ else throw new Error("unknown --split=" + splitName);
 const raw = createReplayEvaluator(modelName, profile);
 const cache = new JsonlSignalCache(cachePath);
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
-const featureConfig = { ...defaultFeatureConfig, horizonBars };
+const featureConfig = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor };
 
 let evaluated = 0;
 const firstIndex = Math.max(featureConfig.minHistoryBars, selectedRange.start);
