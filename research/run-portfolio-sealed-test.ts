@@ -118,6 +118,59 @@ console.log(
   " · fresh tokens " + evaluator.newInputTokens
 );
 
+const signalRows: {
+  symbol: string;
+  truth: "long" | "flat" | "short";
+  choice: "long" | "flat" | "short";
+  forwardReturnBps: number;
+  calledSideReturnBps: number;
+}[] = [];
+for (let i = sealedStart; i <= sealedEnd; i += freeze.cadence.decisionEveryBars) {
+  const states = buildPortfolioFeatureStates(series, i, sealedFeatureConfig);
+  for (const asset of assets) {
+    const state = states.get(asset.spec.symbol);
+    if (!state) continue;
+    const signal = cache.get(raw.name, state);
+    if (!signal) throw new Error("sealed signal unexpectedly missing after prefetch");
+    const future = asset.bars[i + freeze.features.horizonBars]!;
+    const forwardReturnBps = (future.close / state.price - 1) * 10_000;
+    const truth =
+      forwardReturnBps > state.directionThresholdBps ? "long" :
+      forwardReturnBps < -state.directionThresholdBps ? "short" : "flat";
+    const choice = signal.direction.choice;
+    signalRows.push({
+      symbol: asset.spec.symbol,
+      truth,
+      choice,
+      forwardReturnBps,
+      calledSideReturnBps:
+        choice === "long" ? forwardReturnBps :
+        choice === "short" ? -forwardReturnBps : 0,
+    });
+  }
+}
+const signalDiagnostics = (() => {
+  const summarize = (rows: typeof signalRows) => ({
+    n: rows.length,
+    directionAccuracy: rows.length ? rows.filter((x) => x.choice === x.truth).length / rows.length : 0,
+    meanCalledSideReturnBps: rows.length
+      ? rows.reduce((s, x) => s + x.calledSideReturnBps, 0) / rows.length
+      : 0,
+    meanForwardReturnBps: rows.length
+      ? rows.reduce((s, x) => s + x.forwardReturnBps, 0) / rows.length
+      : 0,
+  });
+  return {
+    overall: summarize(signalRows),
+    bySymbol: Object.fromEntries(
+      assets.map((asset) => [
+        asset.spec.symbol,
+        summarize(signalRows.filter((x) => x.symbol === asset.spec.symbol)),
+      ]),
+    ),
+  };
+})();
+
 const result = await replayPortfolio(assets, {
   evaluator,
   policy: freeze.policy,
@@ -212,6 +265,11 @@ console.log("P&L $" + result.pnl.toFixed(2) + " · return " + result.returnPct.t
 console.log("turnover " + result.turnover.toFixed(1) + "x · " + turnoverPerDay.toFixed(2) + "x/day · fills " + result.fills.length + " · fees $" + result.fees.toFixed(4) + " · borrow $" + result.borrowCost.toFixed(6) + " · funding net $" + result.fundingNet.toFixed(6));
 console.log("benchmark equal-weight long hold · return " + benchmark.returnPct.toFixed(2) + "% · max DD " + benchmark.maxDrawdownPct.toFixed(2) + "% · funding net $" + benchmark.fundingNet.toFixed(6));
 console.log("benchmark cash · return 0.00%");
+console.log(
+  "raw Jev signal · accuracy " + (signalDiagnostics.overall.directionAccuracy * 100).toFixed(1) + "%" +
+  " · called-side forward " + signalDiagnostics.overall.meanCalledSideReturnBps.toFixed(2) + " bps" +
+  " · market forward " + signalDiagnostics.overall.meanForwardReturnBps.toFixed(2) + " bps"
+);
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
 
 const outPath = flag("out");
@@ -228,7 +286,7 @@ if (outPath) {
     prefetchedMissingStates: missingStates.length,
     newEvaluations: evaluator.newEvaluations,
     freshInputTokens: evaluator.newInputTokens,
-    diagnostics: { turnoverPerDay },
+    diagnostics: { turnoverPerDay, signal: signalDiagnostics },
     benchmarks: {
       cash: { returnPct: 0, pnl: 0, finalEquity: freeze.execution.initialCash },
       equalWeightLongHold: benchmark,
