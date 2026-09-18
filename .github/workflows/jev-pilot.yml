@@ -100,6 +100,7 @@ jobs:
             --kind=spot \
             --allow-short=false \
             --model=jev \
+            --require-complete-grid=true \
             --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
