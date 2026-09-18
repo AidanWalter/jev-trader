@@ -30,7 +30,7 @@ on:
       profiles:
         description: Jev input profiles
         required: true
-        default: "technical,path,full"
+        default: "technical,path,cross,full"
       decision_every:
         description: Evaluate every N synchronized bars
         required: true
