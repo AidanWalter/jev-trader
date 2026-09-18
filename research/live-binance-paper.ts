@@ -7,7 +7,7 @@ import type { InputProfile } from "./profiles";
 import type { MarketBar } from "./types";
 
 interface PaperState {
-  version: "binance-paper-v1";
+  version: "binance-paper-v2";
   symbol: string;
   interval: string;
   evaluatorNamespace: string;
@@ -68,7 +68,7 @@ function event(value: unknown) {
 function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const s = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
-  if (s.version !== "binance-paper-v1" || s.symbol !== symbol || s.interval !== interval) {
+  if (s.version !== "binance-paper-v2" || s.symbol !== symbol || s.interval !== interval) {
     throw new Error("paper state does not match requested symbol/interval");
   }
   if (s.evaluatorNamespace !== raw.name) {
@@ -192,7 +192,7 @@ while (cycles === 0 || cycle < cycles) {
     const { closed, current } = await fetchBars();
     if (!state) {
       state = {
-        version: "binance-paper-v1",
+        version: "binance-paper-v2",
         symbol,
         interval,
         evaluatorNamespace: raw.name,
@@ -204,9 +204,16 @@ while (cycles === 0 || cycle < cycles) {
         lastDecisionTs: null,
         startedAt: Date.now(),
       };
-      const d = await decide(state, closed);
+      event({
+        type: "initialized",
+        at: Date.now(),
+        barTs: current.ts,
+        open: current.open,
+        equity: equity(state, current.open),
+        note: "No decision on startup because the current bar is already open; first clean decision waits for the next bar boundary.",
+      });
       saveState(state);
-      console.log("initialized " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2) + " · next target " + d.target.toFixed(3));
+      console.log("initialized " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2) + " · waiting for clean bar boundary");
     } else if (current.ts > state.lastOpenTs) {
       const fill = executePending(state, current);
       state.lastOpenTs = current.ts;
