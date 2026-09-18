@@ -122,7 +122,11 @@ async function decide(state: PaperState, closed: MarketBar[]) {
   const features = buildFeatureState(closed, i, featureConfig);
   if (!features) throw new Error("could not construct live feature state");
   const signal = await evaluator.evaluate(features);
-  const action = choosePolicyAction(signal, exposure(state, closed[i]!.close), policy);
+  const roundTripCostBps = features.spreadBps + 2 * slippageBps + 2 * feeBps;
+  const action = choosePolicyAction(signal, exposure(state, closed[i]!.close), policy, {
+    directionThresholdBps: features.directionThresholdBps,
+    estimatedRoundTripCostBps: roundTripCostBps,
+  });
   let target = action.kind === "target" ? action.targetExposure : exposure(state, closed[i]!.close);
   if (!allowShort) target = Math.max(0, target);
   state.pendingTarget = target;
