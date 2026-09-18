@@ -32,6 +32,8 @@ const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,te
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "4")));
 const samplePerCell = Math.max(1, Number(flag("sample-per-cell", "5")));
 const maxNewEvaluations = Math.max(1, Number(flag("max-new-evals", String(horizons.length * profiles.length * samplePerCell))));
+const maxFreshInputTokens = Math.max(0, Number(flag("max-input-tokens", "Infinity")));
+const reserveInputTokensPerEvaluation = Math.max(0, Number(flag("reserve-input-tokens", "1800")));
 const cachePath = flag("cache", "data/jev-probe-cache.jsonl")!;
 const outPath = flag("out", "data/jev-probe-summary.json")!;
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
@@ -98,7 +100,14 @@ for (const horizonBars of horizons) {
       continue;
     }
 
-    const evaluator = new CachedEvaluator(raw, cache, sample.length);
+    const remainingTokenBudget = Number.isFinite(maxFreshInputTokens)
+      ? Math.max(0, maxFreshInputTokens - freshInputTokens)
+      : Infinity;
+    const evaluator = new CachedEvaluator(raw, cache, {
+      maxNewEvaluations: sample.length,
+      maxFreshInputTokens: remainingTokenBudget,
+      reserveInputTokensPerEvaluation,
+    });
     const observed = await mapLimit(sample, concurrency, async (state) => {
       const signal = await evaluator.evaluate(state);
       return { ts: state.ts, inputTokens: signal.inputTokens, latencyMs: signal.latencyMs };
@@ -166,6 +175,8 @@ const summary = {
   decisionEveryBars,
   samplePerCell,
   maxNewEvaluations,
+  maxFreshInputTokens,
+  reserveInputTokensPerEvaluation,
   concurrency,
   usedNewEvaluations,
   freshInputTokens: totalFreshTokens,
