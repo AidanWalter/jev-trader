@@ -6,6 +6,7 @@ export const defaultFeatureConfig: FeatureConfig = {
   spreadBpsFallback: 5,
   directionThresholdSpreadMultiple: 1,
   directionThresholdBpsFloor: 1,
+  directionThresholdFixedCostBps: 0,
   recentPoints: 24,
 };
 
@@ -70,7 +71,7 @@ export function buildFeatureState(
     directionThresholdBps: Number(Math.max(
       1,
       config.directionThresholdBpsFloor,
-      spreadBps * config.directionThresholdSpreadMultiple,
+      spreadBps * config.directionThresholdSpreadMultiple + config.directionThresholdFixedCostBps,
     ).toFixed(3)),
     returnsBps: {
       r1: Number(ret(bars, index, 1).toFixed(3)),
