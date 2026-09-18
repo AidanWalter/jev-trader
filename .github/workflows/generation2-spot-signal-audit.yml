@@ -21,6 +21,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - run: bun install --frozen-lockfile
       - name: Download rejected generation-two spot artifact
         uses: actions/download-artifact@v4
         with:
