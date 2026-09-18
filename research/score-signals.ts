@@ -4,8 +4,8 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import type { InputProfile } from "./profiles";
-import { chronologicalSplit } from "./splits";
-import type { AssetKind, Direction, Magnitude, MarketBar } from "./types";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
+import type { AssetKind, Direction, Magnitude } from "./types";
 
 const args = process.argv.slice(2);
 const flag = (name: string, fallback?: string) => {
@@ -35,14 +35,15 @@ const allBars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 const split = chronologicalSplit(allBars);
+const ranges = chronologicalRanges(allBars);
 
-let bars: MarketBar[];
-if (splitName === "train") bars = split.train;
-else if (splitName === "validation") bars = split.validation;
-else if (splitName === "dev") bars = [...split.train, ...split.validation];
+let selectedRange: { start: number; end: number };
+if (splitName === "train") selectedRange = ranges.train;
+else if (splitName === "validation") selectedRange = ranges.validation;
+else if (splitName === "dev") selectedRange = { start: ranges.train.start, end: ranges.validation.end };
 else if (splitName === "test") {
   if (!allowTest) throw new Error("sealed test requested; pass --allow-test=true only after the apparatus is frozen");
-  bars = split.test;
+  selectedRange = ranges.test;
 } else throw new Error("unknown --split=" + splitName);
 
 const raw = createReplayEvaluator(modelName, profile);
@@ -70,11 +71,12 @@ let adverseBrier = 0;
 let adverseCorrect = 0;
 
 const eps = 1e-12;
-for (let i = featureConfig.minHistoryBars; i + horizonBars < bars.length; i += decisionEveryBars) {
-  const state = buildFeatureState(bars, i, featureConfig);
+const firstIndex = Math.max(featureConfig.minHistoryBars, selectedRange.start);
+for (let i = firstIndex; i + horizonBars < selectedRange.end; i += decisionEveryBars) {
+  const state = buildFeatureState(allBars, i, featureConfig);
   if (!state) continue;
-  const future = bars[i + horizonBars]!;
-  const next = bars[i + 1];
+  const future = allBars[i + horizonBars]!;
+  const next = allBars[i + 1];
   const returnBps = (future.close / state.price - 1) * 10_000;
   const abs = Math.abs(returnBps);
   const t = state.directionThresholdBps;
