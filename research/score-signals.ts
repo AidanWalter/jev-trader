@@ -29,6 +29,12 @@ const cachePath = flag("cache", "data/jev-cache.jsonl")!;
 const horizonBars = Math.max(1, Number(flag("horizon", "12")));
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
+const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
+const slippageBps = Number(flag("slippage-bps", "1"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "0" : "1000000000")));
 
 const allBars = extname(file).toLowerCase() === ".jsonl"
@@ -49,7 +55,7 @@ else if (splitName === "test") {
 const raw = createReplayEvaluator(modelName, profile);
 const cache = new JsonlSignalCache(cachePath);
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
-const featureConfig = { ...defaultFeatureConfig, horizonBars };
+const featureConfig = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor };
 
 const directions: Direction[] = ["long", "flat", "short"];
 const magnitudes: Magnitude[] = ["tiny", "small", "medium", "large"];
