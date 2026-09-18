@@ -320,6 +320,10 @@ if (!(chosen.validationMetrics.returnPct > 0)) reasons.push("nominal validation 
 if (!(stress15?.metrics.returnPct > 0)) reasons.push("validation return is not positive at 1.5x modeled costs");
 if (chosen.validationMetrics.fills < 10) reasons.push("fewer than 10 validation fills");
 if (!(chosen.validationObjective > 0)) reasons.push("nominal validation objective is not positive");
+const losingValidationSegments = (chosen.validationSegments ?? []).filter((x: any) => !(x.metrics.returnPct > 0));
+if (losingValidationSegments.length) {
+  reasons.push("one or more chronological validation halves are not positive: " + losingValidationSegments.map((x: any) => x.name).join(","));
+}
 
 const selection = {
   version: "portfolio-apparatus-selection-v1",
@@ -344,6 +348,7 @@ const selection = {
       positiveReturnAtCostMultiplier: 1.5,
       minimumValidationFills: 10,
       positiveNominalObjective: true,
+      positiveEachChronologicalValidationHalf: true,
     },
   },
   candidates,
