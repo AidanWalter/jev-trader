@@ -59,36 +59,42 @@ if (!file) {
 
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
-const horizonBars = Math.max(1, Number(flag("horizon", "12")));
+const horizons = (flag("horizons", flag("horizon", "12")) ?? "12")
+  .split(",")
+  .map((x) => Math.max(1, Number(x.trim())))
+  .filter((x, i, a) => Number.isFinite(x) && a.indexOf(x) === i);
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 
-const result = await replayBars(bars, {
-  evaluator: new OracleEvaluator(bars, horizonBars),
-  features: { horizonBars },
-  endIndex: bars.length - horizonBars - 1,
-  decisionEveryBars: Math.max(1, Number(flag("decision-every", "4"))),
-  execution: {
-    initialCash: Number(flag("cash", "100")),
-    feeBps: Number(flag("fee-bps", kind === "stock" ? "1" : "4")),
-    slippageBps: Number(flag("slippage-bps", "1")),
-    spreadBpsFallback: spreadBps,
-    allowShort: flag("allow-short", "true") !== "false",
-  },
-  policy: {
-    minDirectionalEdge: 0,
-    minDirectionalConfidence: 0,
-    maxAdverseSelection: 1,
-    flatExitProbability: 0.5,
-    minExpectedMoveCostMultiple: Number(flag("cost-multiple", "1.25")),
-  },
-});
+for (const horizonBars of horizons) {
+  const result = await replayBars(bars, {
+    evaluator: new OracleEvaluator(bars, horizonBars),
+    features: { horizonBars },
+    endIndex: bars.length - horizonBars - 1,
+    decisionEveryBars: Math.max(1, Number(flag("decision-every", "4"))),
+    execution: {
+      initialCash: Number(flag("cash", "100")),
+      feeBps: Number(flag("fee-bps", kind === "stock" ? "1" : "4")),
+      slippageBps: Number(flag("slippage-bps", "1")),
+      spreadBpsFallback: spreadBps,
+      allowShort: flag("allow-short", "true") !== "false",
+    },
+    policy: {
+      minDirectionalEdge: 0,
+      minDirectionalConfidence: 0,
+      maxAdverseSelection: 1,
+      flatExitProbability: 0.5,
+      minExpectedMoveCostMultiple: Number(flag("cost-multiple", "1.25")),
+    },
+  });
 
-const m = result.metrics;
-console.log("PERFECT-FORESIGHT DIAGNOSTIC, NOT A TRADABLE MODEL");
-console.log(symbol + " · horizon " + horizonBars + " bars");
-console.log("P&L $" + m.pnl.toFixed(2) + " · return " + m.returnPct.toFixed(2) + "% · buy/hold " + m.buyHoldReturnPct.toFixed(2) + "%");
-console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · turnover " + m.turnover.toFixed(1) + "x · fees $" + m.fees.toFixed(4));
-console.log("orders " + m.orders + " · round trips " + m.roundTrips + " · wins " + m.wins + " · losses " + m.losses);
+  const m = result.metrics;
+  console.log("PERFECT-FORESIGHT DIAGNOSTIC, NOT A TRADABLE MODEL");
+  console.log(symbol + " · horizon " + horizonBars + " bars");
+  console.log("P&L $" + m.pnl.toFixed(2) + " · return " + m.returnPct.toFixed(2) + "% · buy/hold " + m.buyHoldReturnPct.toFixed(2) + "%");
+  console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · turnover " + m.turnover.toFixed(1) + "x · fees $" + m.fees.toFixed(4));
+  console.log("orders " + m.orders + " · round trips " + m.roundTrips + " · wins " + m.wins + " · losses " + m.losses);
+  console.log("");
+}
