@@ -1,0 +1,78 @@
+name: generation2-free-development-validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-free-development-validation.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download exact generation-two market artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Development-only mock pilot
+        run: |
+          bun run research/portfolio-pilot.ts data/g2/universe/universe.json \
+            --model=mock \
+            --require-complete-grid=true \
+            --concurrency=8 \
+            --horizons=8,12 \
+            --profiles=technical,path,cross,full \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --max-new-evals=1000000 \
+            --cache=data/g2/mock-cache.jsonl \
+            --out=data/g2/mock-pilot.json
+      - name: Tune development apparatus
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
+            --pilot=data/g2/mock-pilot.json \
+            --cache=data/g2/mock-cache.jsonl \
+            --grid=fast \
+            --out=data/g2/mock-selection.json
+      - name: Freeze without qualifying mock economics
+        run: |
+          bun run research/freeze-portfolio.ts data/g2/universe/universe.json \
+            --selection=data/g2/mock-selection.json \
+            --allow-unqualified=true \
+            --out=data/g2/mock-freeze.json
+      - name: Zero-spend sealed preflight only
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/g2/mock-freeze.json \
+            --manifest=data/g2/universe/universe.json \
+            --cache=data/g2/mock-cache.jsonl | tee data/g2/mock-preflight.txt
+          test ! -f data/g2/mock-sealed-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-free-development-validation-${{ github.run_id }}
+          path: |
+            data/g2/mock-pilot.json
+            data/g2/mock-selection.json
+            data/g2/mock-freeze.json
+            data/g2/mock-preflight.txt
+          retention-days: 30
