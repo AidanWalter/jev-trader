@@ -56,6 +56,17 @@ export function buildFeatureState(
   const avgVolume = mean(recentVolume);
   const sma20 = mean(bars.slice(Math.max(0, index - 19), index + 1).map((x) => x.close));
   const spreadBps = cur.spreadBps ?? config.spreadBpsFallback;
+  let lastFundingBps = 0;
+  let barsSinceFunding = -1;
+  for (let j = index; j >= 0; j--) {
+    const funding = bars[j]!.fundingBps ?? 0;
+    if (funding !== 0) {
+      lastFundingBps = funding;
+      barsSinceFunding = index - j;
+      break;
+    }
+  }
+
   const recentReturnsBps: number[] = [];
   const start = Math.max(1, index - config.recentPoints + 1);
   for (let i = start; i <= index; i++) recentReturnsBps.push(Number(ret(bars, i, 1).toFixed(3)));
@@ -68,6 +79,9 @@ export function buildFeatureState(
     horizonBars: config.horizonBars,
     price: cur.close,
     spreadBps,
+    fundingBps: Number((cur.fundingBps ?? 0).toFixed(6)),
+    lastFundingBps: Number(lastFundingBps.toFixed(6)),
+    barsSinceFunding,
     directionThresholdBps: Number(Math.max(
       1,
       config.directionThresholdBpsFloor,
