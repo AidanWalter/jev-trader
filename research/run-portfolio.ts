@@ -41,6 +41,7 @@ const result = await replayPortfolio(assets, {
     minDirectionalConfidence: Number(flag("min-confidence", "0.48")),
     flatExitProbability: Number(flag("flat-exit", "0.58")),
     maxAdverseSelection: Number(flag("max-adverse", "0.72")),
+    minExpectedMoveCostMultiple: Number(flag("cost-multiple", "1.25")),
   },
   features: {
     horizonBars: Math.max(1, Number(flag("horizon", "12"))),
