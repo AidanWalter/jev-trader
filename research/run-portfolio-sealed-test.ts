@@ -140,11 +140,78 @@ const result = await replayPortfolio(assets, {
   },
 });
 
+function equalWeightLongHoldBenchmark() {
+  const startIndex = ranges.test.start;
+  const endIndex = ranges.test.end - freeze.features.horizonBars - 1;
+  const perAsset = freeze.execution.initialCash / assets.length;
+  let cash = freeze.execution.initialCash;
+  const quantities = new Map<string, number>();
+
+  for (const asset of assets) {
+    const bar = asset.bars[startIndex]!;
+    const spread = Number.isFinite(bar.spreadBps) ? bar.spreadBps! : freeze.execution.spreadBpsFallback;
+    const frictionBps =
+      spread * freeze.execution.spreadCostMultiplier / 2 +
+      freeze.execution.slippageBps;
+    const entryPrice = bar.open * (1 + frictionBps / 10_000);
+    const feeRate = freeze.execution.feeBps / 10_000;
+    const quantity = perAsset / (entryPrice * (1 + feeRate));
+    const notional = quantity * entryPrice;
+    const fee = notional * feeRate;
+    cash -= notional + fee;
+    quantities.set(asset.spec.symbol, quantity);
+  }
+
+  let fundingNet = 0;
+  const equity: { ts: number; equity: number }[] = [];
+  let peak = freeze.execution.initialCash;
+  let maxDrawdownPct = 0;
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    if (i > startIndex) {
+      for (const asset of assets) {
+        const q = quantities.get(asset.spec.symbol) ?? 0;
+        const bar = asset.bars[i]!;
+        if (bar.kind === "perp" && bar.fundingBps) {
+          const pnl = -q * bar.open * bar.fundingBps / 10_000;
+          cash += pnl;
+          fundingNet += pnl;
+        }
+      }
+    }
+    let marked = cash;
+    for (const asset of assets) {
+      marked += (quantities.get(asset.spec.symbol) ?? 0) * asset.bars[i]!.close;
+    }
+    peak = Math.max(peak, marked);
+    const dd = peak > 0 ? (marked / peak - 1) * 100 : 0;
+    maxDrawdownPct = Math.min(maxDrawdownPct, dd);
+    equity.push({ ts: assets[0]!.bars[i]!.ts, equity: marked });
+  }
+
+  const finalEquity = equity.at(-1)!.equity;
+  return {
+    name: "equal-weight-long-hold",
+    initialEquity: freeze.execution.initialCash,
+    finalEquity,
+    pnl: finalEquity - freeze.execution.initialCash,
+    returnPct: (finalEquity / freeze.execution.initialCash - 1) * 100,
+    maxDrawdownPct,
+    fundingNet,
+  };
+}
+
+const benchmark = equalWeightLongHoldBenchmark();
+const turnoverDays = Math.max(1, (result.endTs - result.startTs) / 86_400_000);
+const turnoverPerDay = result.turnover / turnoverDays;
+
 console.log("PORTFOLIO SEALED TEST");
 console.log(result.symbols.join(", "));
 console.log(new Date(result.startTs).toISOString() + " -> " + new Date(result.endTs).toISOString());
 console.log("P&L $" + result.pnl.toFixed(2) + " · return " + result.returnPct.toFixed(2) + "% · max DD " + result.maxDrawdownPct.toFixed(2) + "%");
-console.log("turnover " + result.turnover.toFixed(1) + "x · fills " + result.fills.length + " · fees $" + result.fees.toFixed(4) + " · borrow $" + result.borrowCost.toFixed(6) + " · funding net $" + result.fundingNet.toFixed(6));
+console.log("turnover " + result.turnover.toFixed(1) + "x · " + turnoverPerDay.toFixed(2) + "x/day · fills " + result.fills.length + " · fees $" + result.fees.toFixed(4) + " · borrow $" + result.borrowCost.toFixed(6) + " · funding net $" + result.fundingNet.toFixed(6));
+console.log("benchmark equal-weight long hold · return " + benchmark.returnPct.toFixed(2) + "% · max DD " + benchmark.maxDrawdownPct.toFixed(2) + "% · funding net $" + benchmark.fundingNet.toFixed(6));
+console.log("benchmark cash · return 0.00%");
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
 
 const outPath = flag("out");
@@ -161,6 +228,11 @@ if (outPath) {
     prefetchedMissingStates: missingStates.length,
     newEvaluations: evaluator.newEvaluations,
     freshInputTokens: evaluator.newInputTokens,
+    diagnostics: { turnoverPerDay },
+    benchmarks: {
+      cash: { returnPct: 0, pnl: 0, finalEquity: freeze.execution.initialCash },
+      equalWeightLongHold: benchmark,
+    },
     result,
   }, null, 2) + "\n");
   console.log("wrote portfolio sealed result " + outPath);
