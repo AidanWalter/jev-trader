@@ -59,5 +59,5 @@ const result = await replayPortfolio(assets, {
 console.log(`symbols ${result.symbols.join(", ")}`);
 console.log(`${new Date(result.startTs).toISOString()} -> ${new Date(result.endTs).toISOString()}`);
 console.log(`P&L $${result.pnl.toFixed(2)} · return ${result.returnPct.toFixed(2)}% · max DD ${result.maxDrawdownPct.toFixed(2)}%`);
-console.log(`turnover ${result.turnover.toFixed(1)}x · fees $${result.fees.toFixed(4)} · borrow $${result.borrowCost.toFixed(4)} · fills ${result.fills.length}`);
+console.log(`turnover ${result.turnover.toFixed(1)}x · fees ${result.fees.toFixed(4)} · borrow ${result.borrowCost.toFixed(4)} · funding net ${result.fundingNet.toFixed(4)} · fills ${result.fills.length}`);
 console.log(`cache ${cache.size} · hits ${cache.hits} · misses ${cache.misses} · new ${evaluator.newEvaluations} · fresh tokens ${evaluator.newInputTokens}`);
