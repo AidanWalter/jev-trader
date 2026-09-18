@@ -26,7 +26,7 @@ interface FreezeRecord {
     namespace: string;
     profile: InputProfile;
   };
-  features: { horizonBars: number; directionThresholdBpsFloor?: number };
+  features: { horizonBars: number; directionThresholdBpsFloor?: number; directionThresholdFixedCostBps?: number };
   cadence: { decisionEveryBars: number };
   execution: {
     initialCash: number;
@@ -90,6 +90,7 @@ const result = await replayBars(bars, {
   features: {
     horizonBars: record.features.horizonBars,
     directionThresholdBpsFloor: record.features.directionThresholdBpsFloor ?? 1,
+    directionThresholdFixedCostBps: record.features.directionThresholdFixedCostBps ?? 0,
   },
   startIndex: ranges.test.start,
   endIndex: ranges.test.end - record.features.horizonBars - 1,
