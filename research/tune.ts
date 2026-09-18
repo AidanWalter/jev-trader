@@ -105,7 +105,8 @@ if (outPolicy) {
   mkdirSync(dir, { recursive: true });
   writeFileSync(outPolicy, JSON.stringify({
     selectedAt: Date.now(),
-    model: rawEvaluator.name,
+    evaluatorKind: modelName,
+    evaluatorNamespace: rawEvaluator.name,
     profile,
     horizonBars,
     decisionEveryBars,
