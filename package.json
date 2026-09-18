@@ -55,6 +55,7 @@
     "data:binance-perps": "bun run scripts/download-binance-perp-universe.ts",
     "research:check-perp-funding": "bun run research/check-perp-funding.ts",
     "research:check-feature-context": "bun run research/check-feature-context.ts",
-    "research:stock-portfolio-paper": "bun run research/live-frozen-yahoo-stock-portfolio-paper.ts"
+    "research:stock-portfolio-paper": "bun run research/live-frozen-yahoo-stock-portfolio-paper.ts",
+    "research:check-live-boundary": "bun run research/check-live-boundary.ts"
   }
 }
