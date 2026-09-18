@@ -1,7 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { createReplayEvaluator } from "./evaluator";
-import { buildFeatureState, defaultFeatureConfig } from "./features";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { choosePolicyAction } from "./policy";
 import { allocatePortfolioTargets, type PortfolioCandidate } from "./portfolio";
 import type { InputProfile } from "./profiles";
@@ -305,10 +306,12 @@ async function decide(
   const details: Record<string, unknown> = {};
   let decisionTs: number | null = null;
 
+  const series = state.symbols.map((symbol) => ({ symbol, bars: closedBySymbol.get(symbol)! }));
+  const featureIndex = series[0]!.bars.length - 1;
+  const featureStates = buildPortfolioFeatureStates(series, featureIndex, featureConfig);
+
   for (const symbol of state.symbols) {
-    const closed = closedBySymbol.get(symbol)!;
-    const i = closed.length - 1;
-    const features = buildFeatureState(closed, i, featureConfig);
+    const features = featureStates.get(symbol);
     if (!features) throw new Error("could not construct live feature state for " + symbol);
     if (decisionTs === null) decisionTs = features.ts;
     else if (features.ts !== decisionTs) throw new Error("live decision features are not timestamp-aligned");
