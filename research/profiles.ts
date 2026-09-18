@@ -12,6 +12,8 @@ export function projectState(state: FeatureState, profile: InputProfile) {
     price: state.price,
     spreadBps: state.spreadBps,
     directionThresholdBps: state.directionThresholdBps,
+  };
+  const funding = {
     fundingBps: state.fundingBps,
     lastFundingBps: state.lastFundingBps,
     barsSinceFunding: state.barsSinceFunding,
@@ -27,7 +29,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       rangeBps: state.rangeBps,
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
-      ...(state.funding ? { funding: state.funding } : {}),
+      ...(state.kind === "perp" ? funding : {}),
     };
   }
   if (profile === "path") {
@@ -39,7 +41,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
       recentReturnsBps: state.recentReturnsBps,
-      ...(state.funding ? { funding: state.funding } : {}),
+      ...(state.kind === "perp" ? funding : {}),
     };
   }
   if (profile === "cross") {
@@ -51,6 +53,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
       recentReturnsBps: state.recentReturnsBps,
+      ...(state.kind === "perp" ? funding : {}),
       marketContext: state.marketContext,
     };
   }
