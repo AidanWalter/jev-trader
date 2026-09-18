@@ -110,18 +110,23 @@ const cache = new JsonlSignalCache(cachePath);
 const rows: any[] = [];
 let usedNewEvaluations = 0;
 
-function scoreableCount(rangeStart: number, rangeEnd: number, horizonBars: number) {
-  const start = Math.max(defaultFeatureConfig.minHistoryBars, rangeStart);
-  if (start + horizonBars >= rangeEnd) return 0;
-  return Math.floor((rangeEnd - horizonBars - 1 - start) / decisionEveryBars) + 1;
+function countMissing(namespace: string, rangeStart: number, rangeEnd: number, horizonBars: number) {
+  const cfg = { ...defaultFeatureConfig, horizonBars };
+  const start = Math.max(cfg.minHistoryBars, rangeStart);
+  let missing = 0;
+  for (let i = start; i + horizonBars < rangeEnd; i += decisionEveryBars) {
+    const state = buildFeatureState(bars, i, cfg);
+    if (state && !cache.has(namespace, state)) missing++;
+  }
+  return missing;
 }
 
 for (const horizonBars of horizons) {
   for (const profile of profiles) {
     const raw = createReplayEvaluator(modelName, profile);
     const expectedFreshCalls =
-      scoreableCount(ranges.train.start, ranges.train.end, horizonBars) +
-      scoreableCount(ranges.validation.start, ranges.validation.end, horizonBars);
+      countMissing(raw.name, ranges.train.start, ranges.train.end, horizonBars) +
+      countMissing(raw.name, ranges.validation.start, ranges.validation.end, horizonBars);
     const remaining = Math.max(0, maxNewEvaluations - usedNewEvaluations);
     if (expectedFreshCalls > remaining && modelName === "jev") {
       rows.push({
