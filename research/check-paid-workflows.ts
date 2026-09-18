@@ -5,6 +5,8 @@ const dir = ".github/workflows";
 const allowed = new Set([
   "jev-direction-canary.yml",
   "jev-direction-sample.yml",
+  "jev-direction-development.yml",
+  "jev-direction-sealed.yml",
 ]);
 
 let failures = 0;
@@ -28,6 +30,8 @@ for (const name of readdirSync(dir).filter((x) => x.endsWith(".yml") || x.endsWi
       ok(name + " scopes Jev secret below job level");
     }
     if (!text.includes("confirm_spend")) fail(name + " must require explicit spend confirmation");
+    if (!text.includes("--max-usd=")) fail(name + " must pass an explicit hard dollar cap");
+    if (!text.includes("--concurrency=1")) fail(name + " must run paid Jev calls serially");
     continue;
   }
 
