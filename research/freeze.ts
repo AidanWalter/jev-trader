@@ -16,12 +16,14 @@ interface SelectedPolicyFile {
   policy: PolicyConfig;
   trainMetrics?: unknown;
   validationMetrics?: unknown;
+  directionThresholdBpsFloor?: number;
 }
 
 interface ApparatusSelectionFile {
   version: "apparatus-selection-v1";
   decisionEveryBars: number;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
+  features: { directionThresholdBpsFloor: number };
   chosen: {
     horizonBars: number;
     profile: string;
@@ -45,6 +47,7 @@ function normalizeSelection(raw: SelectedPolicyFile | ApparatusSelectionFile): S
       feeBps: s.execution.feeBps,
       slippageBps: s.execution.slippageBps,
       policy: s.chosen.policy,
+      directionThresholdBpsFloor: s.features.directionThresholdBpsFloor,
       trainMetrics: s.chosen.trainMetrics,
       validationMetrics: s.chosen.validationMetrics,
     };
@@ -105,6 +108,7 @@ const freezeRecord = {
   },
   features: {
     horizonBars: selected.horizonBars,
+    directionThresholdBpsFloor: selected.directionThresholdBpsFloor ?? 1,
   },
   cadence: {
     decisionEveryBars: selected.decisionEveryBars,
