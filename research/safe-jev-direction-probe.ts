@@ -147,12 +147,22 @@ for (let offset = 0; offset < sample.length; offset += concurrency) {
       const y = truth === label ? 1 : 0;
       brier += (signal.direction.probabilities[label] - y) ** 2;
     }
+    const confidence = Math.max(
+      signal.direction.probabilities.long,
+      signal.direction.probabilities.flat,
+      signal.direction.probabilities.short,
+    );
+    const directionalEdge = Math.abs(
+      signal.direction.probabilities.long - signal.direction.probabilities.short,
+    );
     return {
       symbol: row.state.symbol,
       ts: row.state.ts,
       truth,
       choice,
       probabilities: signal.direction.probabilities,
+      confidence,
+      directionalEdge,
       futureReturnBps: retBps,
       calledBps,
       netCalledBps: choice === "flat" ? 0 : calledBps - roundTripCostBps,
@@ -166,6 +176,26 @@ for (let offset = 0; offset < sample.length; offset += concurrency) {
 
 const accuracy = scored.filter((x) => x.choice === x.truth).length / scored.length;
 const mean = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+const subset = (xs: typeof scored) => ({
+  n: xs.length,
+  accuracyPct: xs.length ? xs.filter((x) => x.choice === x.truth).length / xs.length * 100 : null,
+  calledBpsPerState: xs.length ? mean(xs.map((x) => x.calledBps)) : null,
+  netCalledBpsPerState: xs.length ? mean(xs.map((x) => x.netCalledBps)) : null,
+});
+const nonFlatRows = scored.filter((x) => x.choice !== "flat");
+const byChoice = {
+  long: subset(scored.filter((x) => x.choice === "long")),
+  short: subset(scored.filter((x) => x.choice === "short")),
+  flat: subset(scored.filter((x) => x.choice === "flat")),
+};
+const confidenceGates = [0.45, 0.50, 0.55, 0.60, 0.65].map((threshold) => ({
+  threshold,
+  ...subset(nonFlatRows.filter((x) => x.confidence >= threshold)),
+}));
+const edgeGates = [0.10, 0.20, 0.30, 0.40, 0.50].map((threshold) => ({
+  threshold,
+  ...subset(nonFlatRows.filter((x) => x.directionalEdge >= threshold)),
+}));
 const result = {
   version: "safe-jev-direction-probe-v1",
   createdAt: Date.now(),
@@ -187,6 +217,10 @@ const result = {
     netCalledBpsPerState: mean(scored.map((x) => x.netCalledBps)),
     avgInputTokens: mean(scored.map((x) => x.inputTokens)),
     avgLatencyMs: mean(scored.map((x) => x.latencyMs)),
+    nonFlatCount: nonFlatRows.length,
+    byChoice,
+    confidenceGates,
+    edgeGates,
   },
   rows: scored,
 };
@@ -200,5 +234,23 @@ console.log("provider-reported input tokens " + ledger.snapshot().inputTokens + 
 console.log("estimated cost from reported tokens $" + ledger.snapshot().estimatedUsd.toFixed(6));
 console.log("accuracy " + result.metrics.accuracyPct.toFixed(1) + "% · Brier " + result.metrics.brier.toFixed(4));
 console.log("called " + result.metrics.calledBpsPerState.toFixed(2) + " bps/state · net " + result.metrics.netCalledBpsPerState.toFixed(2) + " bps/state");
+for (const gate of confidenceGates) {
+  if (!gate.n) continue;
+  console.log(
+    "confidence >= " + gate.threshold.toFixed(2) +
+    " · n " + gate.n +
+    " · net " + gate.netCalledBpsPerState!.toFixed(2) + " bps/state" +
+    " · acc " + gate.accuracyPct!.toFixed(1) + "%"
+  );
+}
+for (const gate of edgeGates) {
+  if (!gate.n) continue;
+  console.log(
+    "edge >= " + gate.threshold.toFixed(2) +
+    " · n " + gate.n +
+    " · net " + gate.netCalledBpsPerState!.toFixed(2) + " bps/state" +
+    " · acc " + gate.accuracyPct!.toFixed(1) + "%"
+  );
+}
 console.log("avg input " + result.metrics.avgInputTokens.toFixed(0) + " tokens · latency " + result.metrics.avgLatencyMs.toFixed(1) + " ms");
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
