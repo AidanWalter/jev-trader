@@ -123,6 +123,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
   let cash = execution.initialCash;
   let fees = 0;
   let borrowCost = 0;
+  let fundingPnl = 0;
   let fundingNet = 0;
   const quantities = new Map(assets.map((a) => [a.spec.symbol, 0]));
   const fills: PortfolioFill[] = [];
