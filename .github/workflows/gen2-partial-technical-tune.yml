@@ -1,10 +1,7 @@
 name: gen2-partial-technical-tune
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/gen2-partial-technical-tune.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +9,7 @@ permissions:
 
 jobs:
   tune:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
