@@ -31,6 +31,8 @@ jobs:
         run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
       - name: Walk-forward baseline
         run: bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
+      - name: Perfect-foresight viability bound
+        run: bun run research/oracle-bound.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --horizon=12 --decision-every=4 | tee data/oracle.txt
       - uses: actions/upload-artifact@v4
         with:
           name: btc-public-data-baselines
@@ -38,6 +40,7 @@ jobs:
             data/momentum.txt
             data/random.txt
             data/walk-forward.txt
+            data/oracle.txt
           retention-days: 14
 
   crypto-portfolio:
