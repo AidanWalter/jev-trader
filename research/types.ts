@@ -13,6 +13,19 @@ export interface MarketBar {
   fundingBps?: number;
 }
 
+export interface CrossSectionalContext {
+  universeSize: number;
+  breadthR1PositivePct: number;
+  breadthR12PositivePct: number;
+  meanR1Bps: number;
+  meanR12Bps: number;
+  dispersionR12Bps: number;
+  relativeR1Bps: number;
+  relativeR12Bps: number;
+  relativeTrendBps20: number;
+  rankR12Pct: number;
+}
+
 export interface FeatureState {
   symbol: string;
   kind: AssetKind;
@@ -21,6 +34,14 @@ export interface FeatureState {
   horizonBars: number;
   price: number;
   spreadBps: number;
+  /** Funding rate applied on this exact bar, in basis points. Zero when no funding event occurs. */
+  fundingBps: number;
+  /** Most recent non-zero funding observation available at or before this timestamp. */
+  lastFundingBps: number;
+  /** Bars since the most recent non-zero funding event; -1 when none exists in available history. */
+  barsSinceFunding: number;
+  /** Optional point-in-time context from the synchronized portfolio universe. */
+  marketContext?: CrossSectionalContext;
   /** Absolute future return within this band is labeled flat for direction scoring. */
   directionThresholdBps: number;
   returnsBps: { r1: number; r3: number; r12: number; r48: number };
