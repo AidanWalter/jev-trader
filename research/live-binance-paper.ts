@@ -7,7 +7,7 @@ import type { InputProfile } from "./profiles";
 import type { MarketBar } from "./types";
 
 interface PaperState {
-  version: "binance-paper-v2";
+  version: "binance-paper-v3";
   symbol: string;
   interval: string;
   evaluatorNamespace: string;
@@ -15,7 +15,6 @@ interface PaperState {
   quantity: number;
   fees: number;
   lastOpenTs: number;
-  pendingTarget: number | null;
   lastDecisionTs: number | null;
   startedAt: number;
 }
@@ -78,7 +77,7 @@ function event(value: unknown) {
 function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const s = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
-  if (s.version !== "binance-paper-v2" || s.symbol !== symbol || s.interval !== interval) {
+  if (s.version !== "binance-paper-v3" || s.symbol !== symbol || s.interval !== interval) {
     throw new Error("paper state does not match requested symbol/interval");
   }
   if (s.evaluatorNamespace !== raw.name) {
@@ -139,7 +138,6 @@ async function decide(state: PaperState, closed: MarketBar[]) {
   });
   let target = action.kind === "target" ? action.targetExposure : exposure(state, closed[i]!.close);
   if (!allowShort) target = Math.max(0, target);
-  state.pendingTarget = target;
   state.lastDecisionTs = closed[i]!.ts;
   event({
     type: "decision",
@@ -150,23 +148,22 @@ async function decide(state: PaperState, closed: MarketBar[]) {
     exposure: exposure(state, closed[i]!.close),
     signal,
     action,
-    pendingTarget: target,
+    target,
   });
   return { signal, action, target };
 }
 
-function executePending(state: PaperState, openBar: MarketBar) {
-  if (state.pendingTarget === null || !(openBar.open > 0)) return null;
+function executeTarget(state: PaperState, openBar: MarketBar, targetExposure: number) {
+  if (!(openBar.open > 0)) return null;
   const beforeEquity = equity(state, openBar.open);
   if (!(beforeEquity > 0)) throw new Error("paper account equity is non-positive");
 
-  const targetNotional = beforeEquity * state.pendingTarget;
+  const targetNotional = beforeEquity * targetExposure;
   const targetQty = targetNotional / openBar.open;
   const delta = targetQty - state.quantity;
   const estimated = Math.abs(delta * openBar.open);
   if (estimated < 1) {
-    state.pendingTarget = null;
-    return null;
+      return null;
   }
 
   const side = delta > 0 ? "buy" : "sell";
@@ -186,10 +183,10 @@ function executePending(state: PaperState, openBar: MarketBar) {
     price,
     notional,
     fee,
-    targetExposure: state.pendingTarget,
+    targetExposure,
     equityAfter: equity(state, openBar.open),
   };
-  state.pendingTarget = null;
+  targetExposure = null;
   event(fill);
   return fill;
 }
@@ -202,7 +199,7 @@ while (cycles === 0 || cycle < cycles) {
     const { closed, current } = await fetchBars();
     if (!state) {
       state = {
-        version: "binance-paper-v2",
+        version: "binance-paper-v3",
         symbol,
         interval,
         evaluatorNamespace: raw.name,
@@ -210,7 +207,6 @@ while (cycles === 0 || cycle < cycles) {
         quantity: 0,
         fees: 0,
         lastOpenTs: current.ts,
-        pendingTarget: null,
         lastDecisionTs: null,
         startedAt: Date.now(),
       };
@@ -225,9 +221,9 @@ while (cycles === 0 || cycle < cycles) {
       saveState(state);
       console.log("initialized " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2) + " · waiting for clean bar boundary");
     } else if (current.ts > state.lastOpenTs) {
-      const fill = executePending(state, current);
       state.lastOpenTs = current.ts;
       const d = await decide(state, closed);
+      const fill = executeTarget(state, current, d.target);
       saveState(state);
       console.log(
         new Date(current.ts).toISOString() +
