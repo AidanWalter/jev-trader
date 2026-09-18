@@ -67,3 +67,28 @@ export function alignUniverse(assets: LoadedAsset[]) {
     };
   });
 }
+
+export function fingerprintUniverse(path: string) {
+  const manifestBytes = readFileSync(path);
+  const manifest = loadUniverseManifest(path);
+  const base = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".";
+  const files = manifest.assets.map((spec) => {
+    const resolved = resolve(base, spec.file);
+    const bytes = readFileSync(resolved);
+    const h = new Bun.CryptoHasher("sha256");
+    h.update(bytes);
+    return { file: spec.file, symbol: spec.symbol, sha256: h.digest("hex"), bytes: bytes.length };
+  });
+  const combined = new Bun.CryptoHasher("sha256");
+  combined.update(manifestBytes);
+  for (const f of files) combined.update(f.symbol + ":" + f.file + ":" + f.sha256 + "\n");
+  return {
+    manifestSha256: (() => {
+      const h = new Bun.CryptoHasher("sha256");
+      h.update(manifestBytes);
+      return h.digest("hex");
+    })(),
+    combinedSha256: combined.digest("hex"),
+    files,
+  };
+}
