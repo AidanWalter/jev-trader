@@ -1,0 +1,146 @@
+name: jev-direction-development
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_run_id:
+        description: Successful jev-direction-sample run ID
+        required: true
+      dashboard_verified:
+        description: I checked TypeSafe billing for the 240-state sample and it matched the artifact closely
+        required: true
+        type: boolean
+        default: false
+      confirm_spend:
+        description: I approve one fixed direction-only development pass under a hard $0.60 ledger cap
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  development:
+    if: ${{ inputs.dashboard_verified == true && inputs.confirm_spend == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download exact verified sample artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-sample-${{ inputs.sample_run_id }}
+          path: prior
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.sample_run_id }}
+
+      - name: Verify sample identity and signal gate
+        run: |
+          set -euo pipefail
+          RESULT="$(find prior -name jev-direction-sample.json -print -quit)"
+          CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
+          test -n "$RESULT"
+          test -n "$CACHE"
+          test -n "$MANIFEST"
+          jq -e '
+            .version == "safe-jev-direction-probe-v1" and
+            .horizonBars == 8 and
+            .profile == "lean" and
+            .decisionEveryBars == 8 and
+            .sampleCount == 240 and
+            .budget.requestsStarted <= 240 and
+            .budget.estimatedUsd <= 0.025 and
+            .metrics.brier < 0.6666667 and
+            (
+              (.metrics.confidenceGates | any(.threshold >= 0.50 and .n >= 20 and .netCalledBpsPerState > 0)) or
+              (.metrics.edgeGates | any(.threshold >= 0.20 and .n >= 20 and .netCalledBpsPerState > 0))
+            )
+          ' "$RESULT" >/dev/null
+          mkdir -p data/dev
+          cp -R "$(dirname "$MANIFEST")" data/dev/universe
+          cp "$CACHE" data/dev/jev-direction-cache.jsonl
+          cp "$RESULT" data/dev/sample.json
+
+      - name: Zero-call full development spend plan
+        run: |
+          bun run research/jev-spend-plan.ts data/dev/universe/universe.json \
+            --horizon=8 \
+            --decision-every=8 \
+            --tokens-per-request=2000 | tee data/dev/spend-plan.txt
+          echo "Hard paid limits for the next step: 7000 fresh requests, 14,000,000 input tokens, $0.60."
+
+      - name: Fill one fixed Jev development apparatus
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/portfolio-pilot.ts data/dev/universe/universe.json \
+            --model=jev-direction \
+            --horizons=8 \
+            --profiles=lean \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --require-complete-grid=true \
+            --concurrency=1 \
+            --max-new-evals=7000 \
+            --max-paid-requests=7000 \
+            --max-input-tokens=14000000 \
+            --reserve-tokens-per-request=2000 \
+            --max-usd=0.60 \
+            --usd-per-mtok=0.042 \
+            --cache=data/dev/jev-direction-cache.jsonl \
+            --out=data/dev/pilot.json | tee data/dev/pilot-output.txt
+
+      - name: Tune deterministic policy from cached Jev probabilities
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/dev/universe/universe.json \
+            --pilot=data/dev/pilot.json \
+            --cache=data/dev/jev-direction-cache.jsonl \
+            --grid=full \
+            --out=data/dev/selection.json | tee data/dev/tune-output.txt
+
+      - name: Freeze only a qualified apparatus
+        run: |
+          jq -e '.qualification.passed == true' data/dev/selection.json >/dev/null
+          bun run research/freeze-portfolio.ts data/dev/universe/universe.json \
+            --selection=data/dev/selection.json \
+            --out=data/dev/freeze.json
+
+      - name: Zero-spend sealed preflight only
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/dev/freeze.json \
+            --manifest=data/dev/universe/universe.json \
+            --cache=data/dev/jev-direction-cache.jsonl | tee data/dev/sealed-preflight.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-direction-development-${{ github.run_id }}
+          path: |
+            data/dev/universe/
+            data/dev/sample.json
+            data/dev/spend-plan.txt
+            data/dev/jev-direction-cache.jsonl
+            data/dev/pilot.json
+            data/dev/pilot-output.txt
+            data/dev/selection.json
+            data/dev/tune-output.txt
+            data/dev/freeze.json
+            data/dev/sealed-preflight.txt
+          retention-days: 60
