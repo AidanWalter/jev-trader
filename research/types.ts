@@ -62,6 +62,8 @@ export interface PolicyConfig {
   maxAdverseSelection: number;
   maxTargetExposure: number;
   minExposureChange: number;
+  /** Require probability-weighted expected move to clear estimated round-trip cost by this multiple. */
+  minExpectedMoveCostMultiple: number;
   sizeScoreThresholds: [number, number, number];
 }
 
@@ -70,6 +72,11 @@ export interface PolicyAction {
   targetExposure: number;
   score: number;
   reason: string;
+}
+
+export interface PolicyContext {
+  directionThresholdBps: number;
+  estimatedRoundTripCostBps: number;
 }
 
 export interface FeatureConfig {
