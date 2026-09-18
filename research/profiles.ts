@@ -11,6 +11,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
     horizonBars: state.horizonBars,
     price: state.price,
     spreadBps: state.spreadBps,
+    directionThresholdBps: state.directionThresholdBps,
   };
   if (profile === "minimal") {
     return { ...base, returnsBps: state.returnsBps };
