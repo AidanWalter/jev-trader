@@ -32,6 +32,10 @@ const evaluator = new CachedEvaluator(rawEvaluator, cache, maxNewEvaluations);
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 const horizonBars = Number(flag("horizon", "12"));
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const outPolicy = flag("out-policy");
@@ -72,7 +76,7 @@ for (const minDirectionalEdge of edges) {
           const r = await replayBars(bars, {
           evaluator,
           policy,
-          features: { horizonBars },
+          features: { horizonBars, directionThresholdBpsFloor },
           startIndex: Math.max(50, ranges.train.start),
           endIndex: ranges.train.end - horizonBars - 1,
           decisionEveryBars,
@@ -92,7 +96,7 @@ for (const c of finalists) {
   const r = await replayBars(bars, {
     evaluator,
     policy: c.policy,
-    features: { horizonBars },
+    features: { horizonBars, directionThresholdBpsFloor },
     startIndex: ranges.validation.start,
     endIndex: ranges.validation.end - horizonBars - 1,
     decisionEveryBars,
