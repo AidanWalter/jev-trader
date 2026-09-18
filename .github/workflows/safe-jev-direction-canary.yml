@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   canary:
-    if: ${{ inputs.confirm_budget == 'VERIFIED_12_AND_APPROVE_120' }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
