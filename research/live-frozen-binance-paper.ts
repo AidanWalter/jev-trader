@@ -3,6 +3,7 @@ import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import { choosePolicyAction } from "./policy";
+import { classifyLiveBoundary } from "./live-boundary";
 import type { InputProfile } from "./profiles";
 import type { AssetKind, MarketBar, PolicyConfig } from "./types";
 
@@ -286,19 +287,24 @@ while (cycles === 0 || cycle < cycles) {
       saveState(state);
       console.log("initialized frozen " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2));
     } else if (current.ts > state.lastOpenTs) {
-      const gapBars = intervalMs > 0 ? Math.max(1, Math.round((current.ts - state.lastOpenTs) / intervalMs)) : 1;
+      const boundary = classifyLiveBoundary(
+        state.lastOpenTs,
+        current.ts,
+        closed.at(-1)!.ts,
+        intervalMs,
+      );
       const borrow = accrueCarryingCosts(state, current);
       state.lastOpenTs = current.ts;
 
       let d: { action: unknown; target: number } | null = null;
       let fill: ReturnType<typeof executeTarget> = null;
-      if (gapBars > 1) {
+      if (!boundary.clean) {
         state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
         writeEvent({
           type: "resume-gap",
           at: Date.now(),
           currentBarTs: current.ts,
-          gapBars,
+          gapBars: boundary.gapBars,
           note: "No retroactive fill or decision was simulated after a missed bar boundary.",
         });
       } else {
@@ -314,7 +320,7 @@ while (cycles === 0 || cycle < cycles) {
         new Date(current.ts).toISOString() +
         " · equity $" + equity(state, current.open).toFixed(2) +
         " · exposure " + exposure(state, current.open).toFixed(3) +
-        (gapBars > 1 ? " · resumed after " + gapBars + "-bar gap" : "") +
+        (gapBars > 1 ? " · boundary reset after " + boundary.gapBars + "-bar gap" : "") +
         (d ? " · target " + d.target.toFixed(3) : " · no decision this bar") +
         (fill ? " · filled " + fill.side + " $" + fill.notional.toFixed(2) : "") +
         (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
