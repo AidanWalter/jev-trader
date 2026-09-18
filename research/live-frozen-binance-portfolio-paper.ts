@@ -47,7 +47,7 @@ interface FreezeRecord {
 }
 
 interface PaperState {
-  version: "frozen-binance-portfolio-paper-v2";
+  version: "frozen-binance-portfolio-paper-v3";
   freezeSha256: string;
   evaluatorNamespace: string;
   symbols: string[];
@@ -58,7 +58,6 @@ interface PaperState {
   borrowCost: number;
   fundingNet: number;
   lastOpenTs: number;
-  pendingTargets: Record<string, number> | null;
   lastDecisionTs: number | null;
   barsSinceDecision: number;
   startedAt: number;
@@ -137,7 +136,7 @@ function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const state = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
   if (
-    state.version !== "frozen-binance-portfolio-paper-v2" ||
+    state.version !== "frozen-binance-portfolio-paper-v3" ||
     state.freezeSha256 !== freezeSha256 ||
     state.evaluatorNamespace !== freeze.evaluator.namespace ||
     state.interval !== interval ||
@@ -313,8 +312,11 @@ function accrueCarryingCosts(
   return { borrow, funding };
 }
 
-function executePending(state: PaperState, currents: Record<string, MarketBar>) {
-  if (!state.pendingTargets) return [];
+function executeTargets(
+  state: PaperState,
+  currents: Record<string, MarketBar>,
+  requestedTargets: Record<string, number>,
+) {
   const openPrices = Object.fromEntries(state.symbols.map((s) => [s, currents[s]!.open])) as Record<string, number>;
   const beforeEquity = markEquity(state, openPrices);
   if (!(beforeEquity > 0)) throw new Error("portfolio paper equity is non-positive");
@@ -323,7 +325,7 @@ function executePending(state: PaperState, currents: Record<string, MarketBar>) 
   for (const symbol of state.symbols) {
     const current = currents[symbol]!;
     const currentQ = state.quantities[symbol] ?? 0;
-    let target = state.pendingTargets[symbol] ?? 0;
+    let target = requestedTargets[symbol] ?? 0;
     target = Math.max(-freeze.portfolio.maxAssetExposure, Math.min(freeze.portfolio.maxAssetExposure, target));
     if (!freeze.execution.allowShort) target = Math.max(0, target);
     const targetQty = beforeEquity * target / current.open;
@@ -344,7 +346,8 @@ function executePending(state: PaperState, currents: Record<string, MarketBar>) 
     const fill = {
       type: "fill",
       at: Date.now(),
-      barTs: current.ts,
+      decisionTs: state.lastDecisionTs,
+      executionTs: current.ts,
       symbol,
       side,
       quantity: Math.abs(delta),
@@ -356,7 +359,6 @@ function executePending(state: PaperState, currents: Record<string, MarketBar>) 
     fills.push(fill);
     writeEvent(fill);
   }
-  state.pendingTargets = null;
   return fills;
 }
 
@@ -410,7 +412,6 @@ async function decide(
     freeze.execution.allowShort,
   );
   const targets = Object.fromEntries(state.symbols.map((s) => [s, targetsMap.get(s) ?? 0]));
-  state.pendingTargets = targets;
   state.lastDecisionTs = decisionTs;
   state.barsSinceDecision = 0;
 
@@ -439,7 +440,7 @@ while (cycles === 0 || cycle < cycles) {
 
     if (!state) {
       state = {
-        version: "frozen-binance-portfolio-paper-v2",
+        version: "frozen-binance-portfolio-paper-v3",
         freezeSha256,
         evaluatorNamespace: freeze.evaluator.namespace,
         symbols: [...freeze.universe.symbols],
@@ -450,7 +451,6 @@ while (cycles === 0 || cycle < cycles) {
         borrowCost: 0,
         fundingNet: 0,
         lastOpenTs: currentTs,
-        pendingTargets: null,
         lastDecisionTs: null,
         barsSinceDecision: Math.max(0, freeze.cadence.decisionEveryBars - 1),
         startedAt: Date.now(),
@@ -474,30 +474,25 @@ while (cycles === 0 || cycle < cycles) {
     } else if (currentTs > state.lastOpenTs) {
       const gapBars = Math.max(1, Math.round((currentTs - state.lastOpenTs) / freeze.universe.intervalMs));
       const carrying = accrueCarryingCosts(state, closedBySymbol, currents);
+      state.lastOpenTs = currentTs;
 
+      let targets: Record<string, number> | null = null;
       let fills: any[] = [];
       if (gapBars > 1) {
-        if (state.pendingTargets) {
-          writeEvent({
-            type: "stale-target-cancelled",
-            at: Date.now(),
-            priorBarTs: state.lastOpenTs,
-            currentBarTs: currentTs,
-            gapBars,
-            pendingTargets: state.pendingTargets,
-          });
-        }
-        state.pendingTargets = null;
         state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
+        writeEvent({
+          type: "resume-gap",
+          at: Date.now(),
+          currentBarTs: currentTs,
+          gapBars,
+          note: "No retroactive fill or decision was simulated after missed bar boundaries.",
+        });
       } else {
-        fills = executePending(state, currents);
-      }
-
-      state.lastOpenTs = currentTs;
-      state.barsSinceDecision++;
-      let targets: Record<string, number> | null = null;
-      if (state.barsSinceDecision >= freeze.cadence.decisionEveryBars) {
-        targets = await decide(state, closedBySymbol);
+        state.barsSinceDecision++;
+        if (state.barsSinceDecision >= freeze.cadence.decisionEveryBars) {
+          targets = await decide(state, closedBySymbol);
+          fills = executeTargets(state, currents, targets);
+        }
       }
       saveState(state);
 
@@ -510,7 +505,7 @@ while (cycles === 0 || cycle < cycles) {
         " · equity $" + markEquity(state, openPrices).toFixed(2) +
         " · gross " + gross.toFixed(3) +
         (gapBars > 1 ? " · resumed after " + gapBars + "-bar gap" : "") +
-        (targets ? " · decision" : " · no decision this bar") +
+        (targets ? " · decision and same-boundary fill simulation" : " · no decision this bar") +
         (fills.length ? " · fills " + fills.length : "") +
         (carrying.borrow > 0 ? " · borrow $" + carrying.borrow.toFixed(6) : "") +
         (carrying.funding !== 0 ? " · funding $" + carrying.funding.toFixed(6) : "")
