@@ -98,6 +98,7 @@ jobs:
           bun run research/pilot.ts data/market/pilot.csv \
             --symbol="${{ inputs.symbol }}" \
             --kind=spot \
+            --allow-short=false \
             --model=jev \
             --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
@@ -120,6 +121,7 @@ jobs:
             --policy=data/apparatus-selection.json \
             --symbol="${{ inputs.symbol }}" \
             --kind=spot \
+            --allow-short=false \
             --out=data/apparatus-freeze.json
       - uses: actions/upload-artifact@v4
         if: always()
