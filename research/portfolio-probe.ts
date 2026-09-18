@@ -36,6 +36,8 @@ const maxNewEvaluations = Math.max(
   1,
   Number(flag("max-new-evals", String(horizons.length * profiles.length * samplePerCell))),
 );
+const maxFreshInputTokens = Math.max(0, Number(flag("max-input-tokens", "Infinity")));
+const reserveInputTokensPerEvaluation = Math.max(0, Number(flag("reserve-input-tokens", "1800")));
 const cachePath = flag("cache", "data/portfolio-probe-cache.jsonl")!;
 const outPath = flag("out", "data/portfolio-probe-summary.json")!;
 const feeBps = Number(flag("fee-bps", "4"));
@@ -211,6 +213,8 @@ const summary = {
   decisionEveryBars,
   samplePerCell,
   maxNewEvaluations,
+  maxFreshInputTokens,
+  reserveInputTokensPerEvaluation,
   concurrency,
   usedNewEvaluations,
   freshInputTokens,
@@ -226,6 +230,11 @@ const summary = {
 mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : ".", { recursive: true });
 writeFileSync(outPath, JSON.stringify(summary, null, 2) + "\n");
 console.log("wrote " + outPath);
-console.log("fresh probe tokens " + freshInputTokens + " · estimated probe cost $" + summary.actualProbeCostUsd.toFixed(6));
+console.log(
+  "fresh probe tokens " + freshInputTokens +
+  " · estimated probe cost $" + summary.actualProbeCostUsd.toFixed(6) +
+  " · pre-call token cap " + (Number.isFinite(maxFreshInputTokens) ? maxFreshInputTokens : "unlimited") +
+  " · reserve/call " + reserveInputTokensPerEvaluation
+);
 if (spendLedger) console.log("HARD SPEND RECEIPT " + JSON.stringify(spendLedger.snapshot()));
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
