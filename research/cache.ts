@@ -75,10 +75,12 @@ export class JsonlSignalCache {
 
 export class CachedEvaluator implements SignalEvaluator {
   readonly name: string;
+  newEvaluations = 0;
 
   constructor(
     private inner: SignalEvaluator,
     readonly cache: JsonlSignalCache,
+    readonly maxNewEvaluations = Infinity,
   ) {
     this.name = "cached:" + inner.name;
   }
@@ -86,6 +88,10 @@ export class CachedEvaluator implements SignalEvaluator {
   async evaluate(state: FeatureState): Promise<JevSignal> {
     const hit = this.cache.get(this.inner.name, state);
     if (hit) return hit;
+    if (this.newEvaluations >= this.maxNewEvaluations) {
+      throw new Error(`new-evaluation limit reached (${this.maxNewEvaluations}); increase --max-new-evals deliberately`);
+    }
+    this.newEvaluations++;
     return this.cache.put(this.inner.name, state, await this.inner.evaluate(state));
   }
 }
