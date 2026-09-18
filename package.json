@@ -37,6 +37,7 @@
     "data:binance-universe": "bun run scripts/download-binance-universe.ts",
     "research:oracle": "bun run research/oracle-bound.ts",
     "research:pilot": "bun run research/pilot.ts",
-    "research:tune-apparatus": "bun run research/tune-apparatus.ts"
+    "research:tune-apparatus": "bun run research/tune-apparatus.ts",
+    "research:sealed-preflight": "bun run research/sealed-preflight.ts"
   }
 }
