@@ -119,6 +119,7 @@ jobs:
             --top-n="${{ inputs.top_n }}" \
             --max-gross=1 \
             --max-asset="${{ inputs.max_asset }}" \
+            --allow-short=false \
             --max-new-evals="${{ inputs.max_new_evals }}" \
             --cache=data/portfolio-pilot-cache.jsonl \
             --out=data/portfolio-pilot-summary.json
