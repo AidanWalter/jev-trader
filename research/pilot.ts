@@ -32,6 +32,7 @@ const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,te
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "4")));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "10000" : "1000000000")));
+const requireCompleteGrid = flag("require-complete-grid", "false") === "true";
 const cachePath = flag("cache", "data/jev-pilot-cache.jsonl")!;
 const outPath = flag("out", "data/jev-pilot-summary.json")!;
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
@@ -234,6 +235,7 @@ const summary = {
   horizons,
   profiles,
   newEvaluationBudget: maxNewEvaluations,
+  requireCompleteGrid,
   concurrency,
   usedNewEvaluations,
   freshInputTokens: rows.reduce((s, x) => s + (x.freshInputTokens ?? 0), 0),
@@ -244,3 +246,13 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(summary, null, 2) + "\n");
 console.log("wrote " + outPath);
 console.log("sealed test remained untouched: " + split.test.length + " bars");
+if (requireCompleteGrid) {
+  const incomplete = rows.filter((x) => x.status !== "complete");
+  if (incomplete.length) {
+    throw new Error(
+      "requested pilot grid is incomplete; " +
+      incomplete.map((x) => x.profile + " h=" + x.horizonBars + " (" + x.status + ")").join(", ") +
+      ". Completed calls remain cached; increase --max-new-evals deliberately and rerun."
+    );
+  }
+}
