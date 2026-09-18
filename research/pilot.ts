@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
@@ -169,11 +169,22 @@ for (const horizonBars of horizons) {
   }
 }
 
+const datasetHasher = new Bun.CryptoHasher("sha256");
+datasetHasher.update(readFileSync(file));
+const datasetSha256 = datasetHasher.digest("hex");
+
 const summary = {
-  version: "jev-pilot-v1",
+  version: "jev-pilot-v2",
   createdAt: Date.now(),
   symbol,
   kind,
+  dataset: {
+    file,
+    sha256: datasetSha256,
+    bars: bars.length,
+    firstTs: bars[0]!.ts,
+    lastTs: bars.at(-1)!.ts,
+  },
   bars: bars.length,
   trainBars: split.train.length,
   validationBars: split.validation.length,
