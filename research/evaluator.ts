@@ -75,8 +75,30 @@ export class JevReplayEvaluator implements SignalEvaluator {
   async evaluate(state: FeatureState): Promise<JevSignal> {
     const t0 = performance.now();
     const modelState = projectState(state, this.profile);
-    const r = await experimental_evaluate({ model: this.model, state: modelState as any, questions: QUESTIONS, maxRetries: 0 });
-    const d = r.answers.direction;
+
+    let r: Awaited<ReturnType<typeof experimental_evaluate>>;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        r = await experimental_evaluate({
+          model: this.model,
+          state: modelState as any,
+          questions: QUESTIONS,
+          maxRetries: 2,
+        });
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        const retryableChoiceMismatch =
+          message.includes("did not select a highest-probability option");
+        if (!retryableChoiceMismatch || attempt === 2) throw error;
+        await Bun.sleep(50 * (attempt + 1));
+      }
+    }
+    if (lastError) throw lastError;
+    const d = r!.answers.direction;
     const m = r.answers.magnitude;
     const a = r.answers.adverse;
     if (d?.type !== "choice") throw new Error("direction answer missing or invalid");
