@@ -43,8 +43,17 @@ const spreadBps = Number(flag("spread-bps", "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const allowShort = flag("allow-short", "true") !== "false";
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "1000" : "1000000000")));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 
-const featureConfig = { ...defaultFeatureConfig, horizonBars, spreadBpsFallback: spreadBps };
+const featureConfig = {
+  ...defaultFeatureConfig,
+  horizonBars,
+  spreadBpsFallback: spreadBps,
+  directionThresholdBpsFloor,
+};
 const policy = {
   ...defaultPolicyConfig,
   minDirectionalEdge: Number(flag("min-edge", String(defaultPolicyConfig.minDirectionalEdge))),
