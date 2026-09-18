@@ -112,7 +112,7 @@ console.log("SEALED TEST");
 console.log(record.dataset.symbol + " · " + new Date(result.startTs).toISOString() + " -> " + new Date(result.endTs).toISOString());
 console.log("P&L $" + m.pnl.toFixed(2) + " · return " + m.returnPct.toFixed(2) + "% · buy/hold " + m.buyHoldReturnPct.toFixed(2) + "%");
 console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · Sharpe " + (m.sharpe === null ? "n/a" : m.sharpe.toFixed(2)) + " · turnover " + m.turnover.toFixed(1) + "x");
-console.log("orders " + m.orders + " · wins " + m.wins + " · losses " + m.losses + " · fees $" + m.fees.toFixed(4));
+console.log("orders " + m.orders + " · wins " + m.wins + " · losses " + m.losses + " · fees $" + m.fees.toFixed(4) + " · borrow $" + m.borrowCost.toFixed(4) + " · funding net $" + m.fundingNet.toFixed(4));
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
 
 if (outPath) {
