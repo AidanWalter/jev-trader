@@ -18,6 +18,7 @@ interface SelectedPolicyFile {
   trainMetrics?: unknown;
   validationMetrics?: unknown;
   directionThresholdBpsFloor?: number;
+  directionThresholdFixedCostBps?: number;
 }
 
 interface ApparatusSelectionFile {
@@ -25,7 +26,7 @@ interface ApparatusSelectionFile {
   decisionEveryBars: number;
   evaluatorKind: string;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
-  features: { directionThresholdBpsFloor: number };
+  features: { directionThresholdBpsFloor: number; directionThresholdFixedCostBps?: number };
   qualification?: { passed: boolean; reasons?: string[] };
   chosen: {
     horizonBars: number;
@@ -51,6 +52,7 @@ function normalizeSelection(raw: SelectedPolicyFile | ApparatusSelectionFile): S
       slippageBps: s.execution.slippageBps,
       policy: s.chosen.policy,
       directionThresholdBpsFloor: s.features.directionThresholdBpsFloor,
+      directionThresholdFixedCostBps: s.features.directionThresholdFixedCostBps ?? 0,
       trainMetrics: s.chosen.trainMetrics,
       validationMetrics: s.chosen.validationMetrics,
     };
@@ -125,6 +127,7 @@ const freezeRecord = {
   features: {
     horizonBars: selected.horizonBars,
     directionThresholdBpsFloor: selected.directionThresholdBpsFloor ?? 1,
+    directionThresholdFixedCostBps: selected.directionThresholdFixedCostBps ?? 0,
   },
   cadence: {
     decisionEveryBars: selected.decisionEveryBars,
