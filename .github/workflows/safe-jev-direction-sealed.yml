@@ -1,0 +1,80 @@
+name: safe-jev-direction-sealed
+
+on:
+  workflow_dispatch:
+    inputs:
+      development_run_id:
+        description: Successful safe-jev-direction-development workflow run ID
+        required: true
+      confirm_budget:
+        description: Type APPROVE_ONE_TIME_1752_SEALED to run the frozen sealed test once
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sealed:
+    if: ${{ inputs.confirm_budget == 'APPROVE_ONE_TIME_1752_SEALED' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download exact qualified development artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: safe-jev-direction-development-${{ inputs.development_run_id }}
+          path: data/dev
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.development_run_id }}
+      - name: Verify qualification, validation audit, and sealed call count
+        run: |
+          test -s data/dev/g2-market/universe/universe.json
+          test -s data/dev/g2/jev-direction-cache.jsonl
+          test -s data/dev/g2/portfolio-selection.json
+          test -s data/dev/g2/portfolio-freeze.json
+          test -s data/dev/g2/validation-audit.json
+          jq -e '.qualification.passed == true' data/dev/g2/portfolio-selection.json >/dev/null
+          jq -e '.passed == true and .positiveSegments >= 3' data/dev/g2/validation-audit.json >/dev/null
+          bun run research/portfolio-sealed-preflight.ts data/dev/g2/portfolio-freeze.json \
+            --manifest=data/dev/g2-market/universe/universe.json \
+            --cache=data/dev/g2/jev-direction-cache.jsonl | tee data/dev/g2/sealed-preflight-rerun.txt
+          grep -q "new Jev calls required 1752" data/dev/g2/sealed-preflight-rerun.txt
+      - name: Paid one-time frozen Jev sealed test
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/run-portfolio-sealed-test.ts data/dev/g2/portfolio-freeze.json \
+            --manifest=data/dev/g2-market/universe/universe.json \
+            --cache=data/dev/g2/jev-direction-cache.jsonl \
+            --max-new-evals=1752 \
+            --max-paid-requests=1752 \
+            --max-input-tokens=4000000 \
+            --max-usd=0.18 \
+            --reserve-tokens-per-request=2000 \
+            --concurrency=1 \
+            --out=data/dev/g2/portfolio-sealed-result.json | tee data/dev/g2/portfolio-sealed-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safe-jev-direction-sealed-${{ inputs.development_run_id }}-${{ github.run_id }}
+          path: |
+            data/dev/g2/portfolio-freeze.json
+            data/dev/g2/portfolio-selection.json
+            data/dev/g2/validation-audit.json
+            data/dev/g2/sealed-preflight-rerun.txt
+            data/dev/g2/portfolio-sealed-output.txt
+            data/dev/g2/portfolio-sealed-result.json
+            data/dev/g2/jev-direction-cache.jsonl
+          retention-days: 90
