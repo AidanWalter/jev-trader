@@ -293,9 +293,11 @@ if (!candidates.length) throw new Error("pilot contains no complete apparatus ce
 candidates.sort((a, b) => b.robustValidationObjective - a.robustValidationObjective);
 const chosen = candidates[0]!;
 const stress15 = chosen.validationStress.find((x: any) => x.multiplier === 1.5);
+const stress2 = chosen.validationStress.find((x: any) => x.multiplier === 2);
 const qualificationReasons: string[] = [];
 if (!(chosen.validationMetrics.returnPct > 0)) qualificationReasons.push("nominal validation return is not positive");
 if (!(stress15?.metrics.returnPct > 0)) qualificationReasons.push("validation return is not positive at 1.5x modeled costs");
+if (!(stress2?.metrics.returnPct > 0)) qualificationReasons.push("validation return is not positive at 2x modeled costs");
 if (chosen.validationMetrics.orders < 10) qualificationReasons.push("fewer than 10 validation orders");
 if (!(chosen.validationObjective > 0)) qualificationReasons.push("nominal validation objective is not positive");
 const qualification = {
@@ -303,7 +305,7 @@ const qualification = {
   reasons: qualificationReasons,
   criteria: {
     positiveNominalReturn: true,
-    positiveReturnAtCostMultiplier: 1.5,
+    positiveReturnAtCostMultiplier: 2,
     minimumValidationOrders: 10,
     positiveNominalObjective: true,
   },
