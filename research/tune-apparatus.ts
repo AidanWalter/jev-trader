@@ -23,7 +23,7 @@ interface PilotSummary {
   decisionEveryBars: number;
   modelName: string;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
-  features: { directionThresholdBpsFloor: number };
+  features: { directionThresholdBpsFloor: number; directionThresholdFixedCostBps?: number };
   rows: PilotRow[];
 }
 
@@ -93,6 +93,7 @@ async function validateUnderCosts(
       features: {
         horizonBars: cell.horizonBars,
         directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+                directionThresholdFixedCostBps: pilot.features.directionThresholdFixedCostBps ?? 0,
       },
       startIndex: ranges.validation.start,
       endIndex: ranges.validation.end - cell.horizonBars - 1,
@@ -136,6 +137,7 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
               features: {
                 horizonBars: cell.horizonBars,
                 directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+                directionThresholdFixedCostBps: pilot.features.directionThresholdFixedCostBps ?? 0,
               },
               startIndex: Math.max(50, ranges.train.start),
               endIndex: ranges.train.end - cell.horizonBars - 1,
