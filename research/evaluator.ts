@@ -6,7 +6,7 @@ import type { Direction, FeatureState, JevSignal, Magnitude, SignalEvaluator } f
 export const SIGNAL_VERSION = "replay-signal-v4";
 export const DIRECTION_SIGNAL_VERSION = "replay-direction-v1";
 
-const DIRECTION_ONLY_QUESTIONS = {
+export const DIRECTION_ONLY_QUESTIONS = {
   direction: {
     type: "choice",
     instructions: {
