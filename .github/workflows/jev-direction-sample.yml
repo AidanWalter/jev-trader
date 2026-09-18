@@ -74,6 +74,17 @@ jobs:
           echo "The first 12 deterministic sample states are already cached from the verified canary."
           echo "At the 2000-token reservation, the full 240-request worst-case reservation is 480000 tokens = $0.02016 at $0.042/MTok."
 
+      - name: Refuse duplicate paid sample
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="jev-direction-sample-canary-${{ inputs.canary_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate paid sample"
+            exit 1
+          fi
+
       - name: Run nested 240-state Jev direction sample
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -97,7 +108,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jev-direction-sample-${{ github.run_id }}
+          name: jev-direction-sample-canary-${{ inputs.canary_run_id }}
           path: |
             data/sample/universe/
             data/sample/canary.json
