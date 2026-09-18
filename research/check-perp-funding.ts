@@ -85,9 +85,9 @@ const check = (name: string, ok: boolean) => {
   if (!ok) failures++;
 };
 
-check("positive funding is paid by long", long.metrics.fundingPnl < 0);
-check("positive funding is received by short", short.metrics.fundingPnl > 0);
-check("long and short funding cashflows are approximately symmetric", Math.abs(long.metrics.fundingPnl + short.metrics.fundingPnl) < 0.01);
+check("positive funding is paid by long", long.metrics.fundingNet < 0);
+check("positive funding is received by short", short.metrics.fundingNet > 0);
+check("long and short funding cashflows are approximately symmetric", Math.abs(long.metrics.fundingNet + short.metrics.fundingNet) < 0.01);
 check("perpetual long has no borrow charge", long.metrics.borrowCost === 0);
 check("perpetual short has no stock-style borrow charge", short.metrics.borrowCost === 0);
 check("funding affects final equity", long.metrics.finalEquity < 100 && short.metrics.finalEquity > 100);
@@ -95,12 +95,12 @@ check("funding affects final equity", long.metrics.finalEquity < 100 && short.me
 console.log(JSON.stringify({
   long: {
     finalEquity: long.metrics.finalEquity,
-    fundingPnl: long.metrics.fundingPnl,
+    fundingNet: long.metrics.fundingNet,
     borrowCost: long.metrics.borrowCost,
   },
   short: {
     finalEquity: short.metrics.finalEquity,
-    fundingPnl: short.metrics.fundingPnl,
+    fundingNet: short.metrics.fundingNet,
     borrowCost: short.metrics.borrowCost,
   },
 }, null, 2));
