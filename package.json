@@ -23,6 +23,10 @@
     "research:replay": "bun run research/run.ts",
     "research:tune": "bun run research/tune.ts",
     "data:binance": "bun run scripts/download-binance-klines.ts",
-    "data:stooq": "bun run scripts/download-stooq.ts"
+    "data:stooq": "bun run scripts/download-stooq.ts",
+    "research:portfolio": "bun run research/run-portfolio.ts",
+    "research:check-portfolio": "bun run research/check-portfolio.ts",
+    "research:precompute": "bun run research/precompute.ts",
+    "research:score": "bun run research/score-signals.ts"
   }
 }
