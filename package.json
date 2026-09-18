@@ -43,6 +43,11 @@
     "research:jev-probe": "bun run research/jev-probe.ts",
     "data:polygon": "bun run scripts/download-polygon-aggs.ts",
     "data:polygon-universe": "bun run scripts/download-polygon-universe.ts",
-    "data:yahoo": "bun run scripts/download-yahoo-chart.ts"
+    "data:yahoo": "bun run scripts/download-yahoo-chart.ts",
+    "research:portfolio-pilot": "bun run research/portfolio-pilot.ts",
+    "research:tune-portfolio": "bun run research/tune-portfolio-apparatus.ts",
+    "research:freeze-portfolio": "bun run research/freeze-portfolio.ts",
+    "research:portfolio-sealed-preflight": "bun run research/portfolio-sealed-preflight.ts",
+    "research:portfolio-sealed": "bun run research/run-portfolio-sealed-test.ts"
   }
 }
