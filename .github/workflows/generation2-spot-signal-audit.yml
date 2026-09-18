@@ -1,0 +1,45 @@
+name: generation2-spot-signal-audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-spot-signal-audit.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Download rejected generation-two spot artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Score technical 8h cached signals
+        run: bun run research/score-portfolio-signals.ts data/g2/universe/universe.json --model=jev --profile=technical --horizon=8 --decision-every=8 --split=validation --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/signal-technical-h8.txt
+      - name: Score path 8h cached signals
+        run: bun run research/score-portfolio-signals.ts data/g2/universe/universe.json --model=jev --profile=path --horizon=8 --decision-every=8 --split=validation --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/signal-path-h8.txt
+      - name: Score technical 12h cached signals
+        run: bun run research/score-portfolio-signals.ts data/g2/universe/universe.json --model=jev --profile=technical --horizon=12 --decision-every=8 --split=validation --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/signal-technical-h12.txt
+      - name: Score path 12h cached signals
+        run: bun run research/score-portfolio-signals.ts data/g2/universe/universe.json --model=jev --profile=path --horizon=12 --decision-every=8 --split=validation --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/signal-path-h12.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generation2-spot-signal-audit-${{ github.run_id }}
+          path: data/g2/signal-*.txt
+          retention-days: 30
