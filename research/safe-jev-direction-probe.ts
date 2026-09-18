@@ -33,6 +33,9 @@ const maxUsd = Math.max(0, Number(flag("max-usd", "0.0015")));
 const concurrency = Math.max(1, Number(flag("concurrency", "1")));
 const cachePath = flag("cache", "data/safe-jev-direction-probe-cache.jsonl")!;
 const outPath = flag("out", "data/safe-jev-direction-probe.json")!;
+const referenceCachePath = flag("reference-cache");
+const referenceProfile = flag("reference-profile", "path") as InputProfile;
+const referenceModel = flag("reference-model", "jev")!;
 const feeBps = Number(flag("fee-bps", "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const spreadBps = Number(flag("spread-bps", "4"));
@@ -75,6 +78,19 @@ for (let i = first; i + horizonBars < ranges.train.end; i += decisionEveryBars) 
 }
 if (!rows.length) throw new Error("no train states available for the safe probe");
 
+const referenceRaw = referenceCachePath
+  ? createReplayEvaluator(referenceModel, referenceProfile)
+  : null;
+const referenceCache = referenceCachePath
+  ? new JsonlSignalCache(referenceCachePath)
+  : null;
+const eligibleRows = referenceRaw && referenceCache
+  ? rows.filter((row) => referenceCache.has(referenceRaw.name, row.state))
+  : rows;
+if (!eligibleRows.length) {
+  throw new Error("no train states match the optional paid reference cache");
+}
+
 function sampleRank(row: Row) {
   const text = row.state.symbol + ":" + row.state.ts;
   let h = 2166136261;
@@ -115,7 +131,7 @@ function stratifiedSample(input: Row[], n: number) {
   return picked;
 }
 
-const sample = stratifiedSample(rows, sampleCount);
+const sample = stratifiedSample(eligibleRows, sampleCount);
 const raw = createReplayEvaluator("jev-direction", profile);
 const ledger = new SpendBudgetLedger({
   maxRequests,
@@ -155,12 +171,30 @@ for (let offset = 0; offset < sample.length; offset += concurrency) {
     const directionalEdge = Math.abs(
       signal.direction.probabilities.long - signal.direction.probabilities.short,
     );
+    const reference = referenceRaw && referenceCache
+      ? referenceCache.get(referenceRaw.name, row.state)
+      : null;
+    if (referenceRaw && !reference) {
+      throw new Error("sampled state unexpectedly lacks its reference Jev signal");
+    }
+    const probabilityL1 = reference
+      ? labels.reduce(
+          (sum, label) =>
+            sum + Math.abs(signal.direction.probabilities[label] - reference.direction.probabilities[label]),
+          0,
+        )
+      : null;
     return {
       symbol: row.state.symbol,
       ts: row.state.ts,
       truth,
       choice,
       probabilities: signal.direction.probabilities,
+      referenceChoice: reference?.direction.choice ?? null,
+      referenceProbabilities: reference?.direction.probabilities ?? null,
+      referenceInputTokens: reference?.inputTokens ?? null,
+      agreesWithReference: reference ? reference.direction.choice === choice : null,
+      probabilityL1,
       confidence,
       directionalEdge,
       futureReturnBps: retBps,
@@ -209,6 +243,13 @@ const result = {
   sampleCount,
   sealedTestBars: split.test.length,
   budget: ledger.snapshot(),
+  reference: referenceRaw ? {
+    model: referenceModel,
+    profile: referenceProfile,
+    namespace: referenceRaw.name,
+    cachePath: referenceCachePath,
+    eligibleStates: eligibleRows.length,
+  } : null,
   cache: { path: cachePath, hits: cache.hits, misses: cache.misses, size: cache.size },
   metrics: {
     accuracyPct: accuracy * 100,
@@ -217,6 +258,15 @@ const result = {
     netCalledBpsPerState: mean(scored.map((x) => x.netCalledBps)),
     avgInputTokens: mean(scored.map((x) => x.inputTokens)),
     avgLatencyMs: mean(scored.map((x) => x.latencyMs)),
+    referenceChoiceAgreementPct: referenceRaw
+      ? mean(scored.map((x) => x.agreesWithReference ? 1 : 0)) * 100
+      : null,
+    meanProbabilityL1: referenceRaw
+      ? mean(scored.map((x) => Number(x.probabilityL1 ?? 0)))
+      : null,
+    avgReferenceInputTokens: referenceRaw
+      ? mean(scored.map((x) => Number(x.referenceInputTokens ?? 0)))
+      : null,
     nonFlatCount: nonFlatRows.length,
     byChoice,
     confidenceGates,
@@ -253,4 +303,12 @@ for (const gate of edgeGates) {
   );
 }
 console.log("avg input " + result.metrics.avgInputTokens.toFixed(0) + " tokens · latency " + result.metrics.avgLatencyMs.toFixed(1) + " ms");
+if (result.metrics.referenceChoiceAgreementPct !== null) {
+  console.log(
+    "old full-Jev comparison · choice agreement " +
+    result.metrics.referenceChoiceAgreementPct.toFixed(1) + "%" +
+    " · probability L1 " + result.metrics.meanProbabilityL1!.toFixed(3) +
+    " · old avg input " + result.metrics.avgReferenceInputTokens!.toFixed(0) + " tokens"
+  );
+}
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
