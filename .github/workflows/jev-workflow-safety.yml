@@ -1,0 +1,66 @@
+name: jev-workflow-safety
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit every workflow that can see the Jev secret
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import sys
+
+          root = Path(".github/workflows")
+          allowed = {
+              "jev-direction-canary.yml",
+              "jev-direction-sample.yml",
+              "jev-direction-development.yml",
+              "jev-direction-sealed.yml",
+          }
+          failures = []
+
+          for path in sorted(root.glob("*.y*ml")):
+              if path.name == "jev-workflow-safety.yml":
+                  continue
+              text = path.read_text()
+              if "TYPESAFE_AI_API_KEY" not in text:
+                  continue
+
+              if "if: ${{ false }}\n    if:" in text:
+                  failures.append(f"{path.name}: duplicate job-level if after hard-disable")
+
+              if path.name in allowed:
+                  if "workflow_dispatch:" not in text:
+                      failures.append(f"{path.name}: must remain manual-only")
+                  if re.search(r"^  (push|schedule):", text, re.M):
+                      failures.append(f"{path.name}: automatic trigger forbidden")
+                  if not re.search(r"confirm_spend:", text):
+                      failures.append(f"{path.name}: explicit spend confirmation missing")
+                  if "--max-usd=" not in text:
+                      failures.append(f"{path.name}: explicit hard dollar cap missing")
+                  if "--concurrency=1" not in text:
+                      failures.append(f"{path.name}: paid calls must remain serial")
+                  if re.search(r"^    env:\n      TYPESAFE_AI_API_KEY:", text, re.M):
+                      failures.append(f"{path.name}: Jev secret exposed at job scope")
+              else:
+                  if "if: ${{ false }}" not in text:
+                      failures.append(f"{path.name}: legacy paid workflow is not hard-disabled")
+
+          if failures:
+              for failure in failures:
+                  print("FAIL", failure)
+              sys.exit(1)
+          print("Paid Jev workflow safety audit passed.")
