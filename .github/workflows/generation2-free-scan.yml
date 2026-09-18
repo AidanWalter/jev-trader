@@ -1,0 +1,72 @@
+name: generation2-free-scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-free-scan.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download long multi-regime hourly crypto universe
+        run: |
+          bun run scripts/download-binance-universe.ts \
+            --symbols=BTCUSDT,ETHUSDT,SOLUSDT \
+            --interval=1h \
+            --start=2024-01-01 \
+            --end=2026-09-01 \
+            --out-dir=data/g2/universe \
+            --manifest=data/g2/universe/universe.json
+      - name: Oracle scan every 2 hours
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev \
+            --horizons=2,4,8,12,24 \
+            --decision-every=2 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false | tee data/g2/oracle-every2.txt
+      - name: Oracle scan every 4 hours
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev \
+            --horizons=2,4,8,12,24 \
+            --decision-every=4 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false | tee data/g2/oracle-every4.txt
+      - name: Oracle scan every 8 hours
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev \
+            --horizons=2,4,8,12,24 \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false | tee data/g2/oracle-every8.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-free-scan-${{ github.run_id }}
+          path: |
+            data/g2/universe/
+            data/g2/oracle-every2.txt
+            data/g2/oracle-every4.txt
+            data/g2/oracle-every8.txt
+          retention-days: 30
