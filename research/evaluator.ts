@@ -3,34 +3,34 @@ import { typeSafeAi } from "@ai-sdk/typesafe-ai";
 import { projectState, type InputProfile } from "./profiles";
 import type { Direction, FeatureState, JevSignal, Magnitude, SignalEvaluator } from "./types";
 
-export const SIGNAL_VERSION = "replay-signal-v2";
+export const SIGNAL_VERSION = "replay-signal-v3";
 
 const QUESTIONS = {
   direction: {
     type: "choice",
     instructions: {
-      question: "Over the next horizonBars, which state is most likely: meaningfully higher, roughly flat, or meaningfully lower?",
+      question: "Over the next horizonBars, which state is most likely: higher by more than directionThresholdBps, within plus/minus directionThresholdBps, or lower by more than directionThresholdBps?",
       goal: "Forecast price direction from information available at this timestamp only. Return probabilities, not trading advice. The downstream policy handles position sizing, fees, and risk.",
       inputs: "Use only fields present in the supplied state. spreadBps is the current execution-friction estimate.",
     },
     criteria: {
-      long: "Price ends the horizon meaningfully above the current price.",
-      flat: "Price stays close enough to current price that directional edge is weak.",
-      short: "Price ends the horizon meaningfully below the current price.",
+      long: "Future close is more than directionThresholdBps above the current price.",
+      flat: "Absolute future close return is at most directionThresholdBps.",
+      short: "Future close is more than directionThresholdBps below the current price.",
     },
   },
   magnitude: {
     type: "choice",
     instructions: {
-      question: "How large is the absolute price move over the next horizonBars most likely to be?",
+      question: "How large is the absolute close-to-close move over the next horizonBars, measured against directionThresholdBps?",
       goal: "Estimate move magnitude independently of direction.",
       inputs: "Use only fields present in the supplied state and treat spreadBps as a scale reference.",
     },
     criteria: {
-      tiny: "Absolute move is around the spread or smaller.",
-      small: "Move is noticeable but modest relative to recent conditions.",
-      medium: "Move is substantial relative to recent conditions.",
-      large: "Move is a large tail move relative to recent conditions.",
+      tiny: "Absolute move is at most directionThresholdBps.",
+      small: "Absolute move is above 1x and at most 2x directionThresholdBps.",
+      medium: "Absolute move is above 2x and at most 4x directionThresholdBps.",
+      large: "Absolute move is above 4x directionThresholdBps.",
     },
   },
   adverse: {
@@ -97,7 +97,7 @@ export class JevReplayEvaluator implements SignalEvaluator {
 }
 
 function mockMagnitude(state: FeatureState) {
-  const volScale = state.realizedVolBps.v12 / Math.max(1, state.spreadBps);
+  const volScale = state.realizedVolBps.v12 / Math.max(1, state.directionThresholdBps);
   const large = Math.min(0.6, volScale / 30);
   const medium = Math.min(0.6 - large / 2, volScale / 20);
   const tiny = Math.max(0.05, 1 / (1 + volScale));
