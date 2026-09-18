@@ -156,6 +156,7 @@ jobs:
         run: |
           bun run research/portfolio-pilot.ts data/market/stock-universe/universe.json \
             --model=jev \
+            --require-complete-grid=true \
             --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
