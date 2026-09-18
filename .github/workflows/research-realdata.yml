@@ -25,6 +25,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Download fixed BTC sample
         run: bun run scripts/download-binance-klines.ts --symbol=BTCUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/btc.csv
+      - name: Pilot matrix smoke test with mock evaluator
+        run: bun run research/pilot.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=mock --horizons=6,12 --profiles=full --decision-every=8 --max-new-evals=100000 --cache=data/mock-pilot-cache.jsonl --out=data/mock-pilot-summary.json
       - name: Momentum baseline
         run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
@@ -41,6 +43,7 @@ jobs:
             data/random.txt
             data/walk-forward.txt
             data/oracle.txt
+            data/mock-pilot-summary.json
           retention-days: 14
 
   crypto-portfolio:
