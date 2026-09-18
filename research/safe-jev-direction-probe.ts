@@ -75,8 +75,18 @@ for (let i = first; i + horizonBars < ranges.train.end; i += decisionEveryBars) 
 }
 if (!rows.length) throw new Error("no train states available for the safe probe");
 
+function sampleRank(row: Row) {
+  const text = row.state.symbol + ":" + row.state.ts;
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 function stratifiedSample(input: Row[], n: number) {
-  if (input.length <= n) return [...input];
+  if (input.length <= n) return [...input].sort((a, b) => sampleRank(a) - sampleRank(b));
   const bySymbol = new Map<string, Row[]>();
   for (const row of input) {
     const xs = bySymbol.get(row.state.symbol) ?? [];
@@ -84,25 +94,25 @@ function stratifiedSample(input: Row[], n: number) {
     bySymbol.set(row.state.symbol, xs);
   }
   const symbols = [...bySymbol.keys()].sort();
-  const picked: Row[] = [];
-  const perSymbol = Math.max(1, Math.floor(n / symbols.length));
   for (const symbol of symbols) {
-    const xs = bySymbol.get(symbol)!;
-    for (let j = 0; j < perSymbol && picked.length < n; j++) {
-      const idx = Math.floor((j + 0.5) * xs.length / perSymbol);
-      picked.push(xs[Math.min(xs.length - 1, idx)]!);
-    }
+    bySymbol.get(symbol)!.sort((a, b) => sampleRank(a) - sampleRank(b));
   }
-  if (picked.length < n) {
-    const remaining = input.filter((row) => !picked.includes(row));
-    const need = n - picked.length;
-    for (let j = 0; j < need; j++) {
-      const idx = Math.floor((j + 0.5) * remaining.length / need);
-      const row = remaining[Math.min(remaining.length - 1, idx)];
-      if (row) picked.push(row);
+
+  const picked: Row[] = [];
+  let rank = 0;
+  while (picked.length < n) {
+    let added = false;
+    for (const symbol of symbols) {
+      const row = bySymbol.get(symbol)![rank];
+      if (row && picked.length < n) {
+        picked.push(row);
+        added = true;
+      }
     }
+    if (!added) break;
+    rank++;
   }
-  return picked.slice(0, n).sort((a, b) => a.state.ts - b.state.ts || a.state.symbol.localeCompare(b.state.symbol));
+  return picked;
 }
 
 const sample = stratifiedSample(rows, sampleCount);
