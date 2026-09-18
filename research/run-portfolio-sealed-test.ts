@@ -1,6 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { createReplayEvaluator } from "./evaluator";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import type { InputProfile } from "./profiles";
 import { replayPortfolio } from "./portfolio";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
@@ -81,7 +84,39 @@ if (raw.name !== freeze.evaluator.namespace) {
   throw new Error("evaluator namespace changed since freeze: frozen=" + freeze.evaluator.namespace + " current=" + raw.name);
 }
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "0")));
+const concurrency = Math.max(1, Number(flag("concurrency", freeze.evaluator.kind === "jev" ? "4" : "8")));
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
+
+const sealedFeatureConfig = {
+  ...defaultFeatureConfig,
+  horizonBars: freeze.features.horizonBars,
+  directionThresholdBpsFloor: freeze.features.directionThresholdBpsFloor,
+  directionThresholdFixedCostBps: freeze.features.directionThresholdFixedCostBps,
+};
+const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
+const sealedStart = Math.max(sealedFeatureConfig.minHistoryBars, ranges.test.start);
+const sealedEnd = ranges.test.end - freeze.features.horizonBars - 1;
+const missingStates = [];
+for (let i = sealedStart; i <= sealedEnd; i += freeze.cadence.decisionEveryBars) {
+  const states = buildPortfolioFeatureStates(series, i, sealedFeatureConfig);
+  for (const asset of assets) {
+    const state = states.get(asset.spec.symbol);
+    if (state && !cache.has(raw.name, state)) missingStates.push(state);
+  }
+}
+if (missingStates.length > maxNewEvaluations) {
+  throw new Error(
+    "sealed portfolio test requires " + missingStates.length +
+    " fresh evaluations but --max-new-evals=" + maxNewEvaluations +
+    "; no Jev calls were made"
+  );
+}
+await mapLimit(missingStates, concurrency, (state) => evaluator.evaluate(state));
+console.log(
+  "portfolio sealed prefetch · missing " + missingStates.length +
+  " · concurrency " + concurrency +
+  " · fresh tokens " + evaluator.newInputTokens
+);
 
 const result = await replayPortfolio(assets, {
   evaluator,
@@ -92,11 +127,7 @@ const result = await replayPortfolio(assets, {
   startIndex: ranges.test.start,
   endIndex: ranges.test.end - freeze.features.horizonBars - 1,
   decisionEveryBars: freeze.cadence.decisionEveryBars,
-  features: {
-    horizonBars: freeze.features.horizonBars,
-    directionThresholdBpsFloor: freeze.features.directionThresholdBpsFloor,
-    directionThresholdFixedCostBps: freeze.features.directionThresholdFixedCostBps,
-  },
+  features: sealedFeatureConfig,
   execution: {
     initialCash: freeze.execution.initialCash,
     feeBps: freeze.execution.feeBps,
@@ -126,6 +157,8 @@ if (outPath) {
     freeze: freezePath,
     universeFingerprint: fingerprint.combinedSha256,
     evaluatorNamespace: raw.name,
+    concurrency,
+    prefetchedMissingStates: missingStates.length,
     newEvaluations: evaluator.newEvaluations,
     freshInputTokens: evaluator.newInputTokens,
     result,
