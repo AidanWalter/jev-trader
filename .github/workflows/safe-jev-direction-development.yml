@@ -1,0 +1,131 @@
+name: safe-jev-direction-development
+
+on:
+  workflow_dispatch:
+    inputs:
+      canary_run_id:
+        description: Successful safe-jev-direction-canary workflow run ID
+        required: true
+      confirm_budget:
+        description: Type VERIFIED_120_AND_APPROVE_DEVELOPMENT to allow the fixed paid development run
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  development:
+    if: ${{ inputs.confirm_budget == 'VERIFIED_120_AND_APPROVE_DEVELOPMENT' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download fixed generation-two market data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2-market
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Download verified 120-state canary
+        uses: actions/download-artifact@v4
+        with:
+          pattern: safe-jev-direction-canary-${{ inputs.canary_run_id }}
+          path: data/canary
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.canary_run_id }}
+      - name: Verify fixed apparatus and restore cache
+        run: |
+          test -s data/g2-market/universe/universe.json
+          test -s data/canary/safe-direction-canary.json
+          test -s data/canary/safe-direction-cache.jsonl
+          jq -e '
+            .version == "safe-jev-direction-probe-v1" and
+            .horizonBars == 8 and
+            .profile == "lean" and
+            .decisionEveryBars == 8 and
+            .sampleCount == 120 and
+            .budget.requestsStarted <= 120
+          ' data/canary/safe-direction-canary.json >/dev/null
+          mkdir -p data/g2
+          cp data/canary/safe-direction-cache.jsonl data/g2/jev-direction-cache.jsonl
+          bun run research/jev-spend-plan.ts data/g2-market/universe/universe.json \
+            --horizon=8 --decision-every=8 --tokens-per-request=2000 | tee data/g2/development-spend-plan.txt
+          grep -q "development total · requests 6996" data/g2/development-spend-plan.txt
+      - name: Paid fixed-apparatus Jev development cache
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/portfolio-pilot.ts data/g2-market/universe/universe.json \
+            --model=jev-direction \
+            --horizons=8 \
+            --profiles=lean \
+            --decision-every=8 \
+            --require-complete-grid=true \
+            --max-new-evals=6996 \
+            --max-paid-requests=6996 \
+            --max-input-tokens=15000000 \
+            --max-usd=0.65 \
+            --reserve-tokens-per-request=2000 \
+            --concurrency=1 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --cache=data/g2/jev-direction-cache.jsonl \
+            --out=data/g2/portfolio-pilot-summary.json | tee data/g2/paid-development.txt
+      - name: Tune deterministic direction-only policy from cache
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/g2-market/universe/universe.json \
+            --pilot=data/g2/portfolio-pilot-summary.json \
+            --cache=data/g2/jev-direction-cache.jsonl \
+            --grid=full \
+            --direction-only=true \
+            --out=data/g2/portfolio-selection.json
+      - name: Freeze only a qualified apparatus
+        run: |
+          bun run research/freeze-portfolio.ts data/g2-market/universe/universe.json \
+            --selection=data/g2/portfolio-selection.json \
+            --out=data/g2/portfolio-freeze.json
+      - name: Audit four chronological validation segments
+        run: |
+          bun run research/audit-portfolio-validation.ts data/g2/portfolio-freeze.json \
+            --manifest=data/g2-market/universe/universe.json \
+            --cache=data/g2/jev-direction-cache.jsonl \
+            --segments=4 \
+            --min-positive-segments=3 \
+            --out=data/g2/validation-audit.json
+      - name: Zero-spend sealed preflight only
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/g2/portfolio-freeze.json \
+            --manifest=data/g2-market/universe/universe.json \
+            --cache=data/g2/jev-direction-cache.jsonl | tee data/g2/sealed-preflight.txt
+          grep -q "new Jev calls required 1752" data/g2/sealed-preflight.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safe-jev-direction-development-${{ github.run_id }}
+          path: |
+            data/g2-market/universe/
+            data/g2/development-spend-plan.txt
+            data/g2/jev-direction-cache.jsonl
+            data/g2/portfolio-pilot-summary.json
+            data/g2/portfolio-selection.json
+            data/g2/portfolio-freeze.json
+            data/g2/validation-audit.json
+            data/g2/sealed-preflight.txt
+            data/g2/paid-development.txt
+          retention-days: 90
