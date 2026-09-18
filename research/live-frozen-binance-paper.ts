@@ -21,6 +21,7 @@ interface FreezeRecord {
   features: {
     horizonBars: number;
     directionThresholdBpsFloor?: number;
+    directionThresholdFixedCostBps?: number;
   };
   cadence: { decisionEveryBars: number };
   execution: {
@@ -99,6 +100,7 @@ const featureConfig = {
   horizonBars: freeze.features.horizonBars,
   spreadBpsFallback: freeze.execution.spreadBps,
   directionThresholdBpsFloor: freeze.features.directionThresholdBpsFloor ?? 1,
+  directionThresholdFixedCostBps: freeze.features.directionThresholdFixedCostBps ?? 0,
 };
 
 function saveState(state: PaperState) {
