@@ -27,6 +27,7 @@ interface PortfolioSelection {
     profile: InputProfile;
     evaluatorNamespace: string;
     policy: PolicyConfig;
+    decisionEveryBars?: number;
     portfolio: {
       topN: number;
       maxGrossExposure: number;
@@ -103,7 +104,7 @@ const record = {
     directionThresholdFixedCostBps: selection.features.directionThresholdFixedCostBps,
   },
   cadence: {
-    decisionEveryBars: selection.decisionEveryBars,
+    decisionEveryBars: selection.chosen.decisionEveryBars ?? selection.decisionEveryBars,
   },
   execution: {
     initialCash: Number(flag("cash", "100")),
