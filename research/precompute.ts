@@ -4,8 +4,8 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import type { InputProfile } from "./profiles";
-import { chronologicalSplit } from "./splits";
-import type { AssetKind, MarketBar } from "./types";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
+import type { AssetKind } from "./types";
 
 const args = process.argv.slice(2);
 const flag = (name: string, fallback?: string) => {
@@ -36,11 +36,12 @@ const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 const split = chronologicalSplit(bars);
+const ranges = chronologicalRanges(bars);
 
-let selected: MarketBar[];
-if (splitName === "train") selected = split.train;
-else if (splitName === "validation") selected = split.validation;
-else if (splitName === "dev") selected = [...split.train, ...split.validation];
+let selectedRange: { start: number; end: number };
+if (splitName === "train") selectedRange = ranges.train;
+else if (splitName === "validation") selectedRange = ranges.validation;
+else if (splitName === "dev") selectedRange = { start: ranges.train.start, end: ranges.validation.end };
 else if (splitName === "test") throw new Error("precompute refuses the sealed test split; evaluate it only after the apparatus is frozen");
 else throw new Error("unknown --split=" + splitName);
 
@@ -50,8 +51,9 @@ const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
 const featureConfig = { ...defaultFeatureConfig, horizonBars };
 
 let evaluated = 0;
-for (let i = featureConfig.minHistoryBars; i < selected.length - 1; i += decisionEveryBars) {
-  const state = buildFeatureState(selected, i, featureConfig);
+const firstIndex = Math.max(featureConfig.minHistoryBars, selectedRange.start);
+for (let i = firstIndex; i < selectedRange.end - 1; i += decisionEveryBars) {
+  const state = buildFeatureState(bars, i, featureConfig);
   if (!state) continue;
   await evaluator.evaluate(state);
   evaluated++;
@@ -63,7 +65,7 @@ for (let i = featureConfig.minHistoryBars; i < selected.length - 1; i += decisio
 if (evaluated >= 100) process.stdout.write("\n");
 
 const usd = evaluator.newInputTokens / 1e6 * pricePerMTok;
-console.log(`dataset ${symbol} · split ${splitName} · bars ${selected.length} · profile ${profile} · every ${decisionEveryBars}`);
+console.log(`dataset ${symbol} · split ${splitName} · bars ${selectedRange.end - selectedRange.start} · profile ${profile} · every ${decisionEveryBars}`);
 console.log(`evaluator ${raw.name} · states ${evaluated} · cache hits ${cache.hits} · cache misses ${cache.misses}`);
 console.log(`new evaluations ${evaluator.newEvaluations} · fresh input tokens ${evaluator.newInputTokens} · estimated fresh cost $${usd.toFixed(6)}`);
 console.log(`sealed test bars remain untouched: ${split.test.length}`);
