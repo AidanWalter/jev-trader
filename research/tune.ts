@@ -5,7 +5,7 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
-import { chronologicalSplit } from "./splits";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
 import { defaultPolicyConfig } from "./policy";
 import type { AssetKind, PolicyConfig, ReplayMetrics } from "./types";
 
@@ -40,6 +40,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 const split = chronologicalSplit(bars);
+const ranges = chronologicalRanges(bars);
 
 function objective(m: ReplayMetrics) {
   const sharpe = m.sharpe ?? 0;
@@ -68,10 +69,12 @@ for (const minDirectionalEdge of edges) {
             maxTargetExposure,
             minExpectedMoveCostMultiple,
           };
-          const r = await replayBars(split.train, {
+          const r = await replayBars(bars, {
           evaluator,
           policy,
           features: { horizonBars },
+          startIndex: Math.max(50, ranges.train.start),
+          endIndex: ranges.train.end - 2,
           decisionEveryBars,
           execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
         });
@@ -86,10 +89,12 @@ candidates.sort((a, b) => b.trainScore - a.trainScore);
 const finalists = candidates.slice(0, Math.min(12, candidates.length));
 const validated = [];
 for (const c of finalists) {
-  const r = await replayBars(split.validation, {
+  const r = await replayBars(bars, {
     evaluator,
     policy: c.policy,
     features: { horizonBars },
+    startIndex: ranges.validation.start,
+    endIndex: ranges.validation.end - 2,
     decisionEveryBars,
     execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
   });
