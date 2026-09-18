@@ -1,0 +1,76 @@
+name: jev-safe-12-call-canary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  canary:
+    # Deliberately locked. Remove only after the user confirms new credits exist.
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install without Jev secret
+        run: bun install --frozen-lockfile
+
+      - name: Download fixed long-window dataset and already-paid Jev cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Verify zero-cost canary inputs
+        run: |
+          test -s data/g2/universe/universe.json
+          test -s data/g2/portfolio-pilot-cache.jsonl
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h"
+          ' data/g2/universe/universe.json >/dev/null
+
+      - name: Run exactly twelve budgeted Jev direction calls
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/safe-jev-direction-probe.ts data/g2/universe/universe.json \
+            --horizon=12 \
+            --profile=lean \
+            --decision-every=32 \
+            --sample=12 \
+            --max-requests=12 \
+            --max-input-tokens=30000 \
+            --reserve-input-tokens=2000 \
+            --max-usd=0.0015 \
+            --usd-per-mtok=0.042 \
+            --concurrency=1 \
+            --reference-cache=data/g2/portfolio-pilot-cache.jsonl \
+            --reference-profile=path \
+            --reference-model=jev \
+            --cache=data/g2/safe-direction-canary-cache.jsonl \
+            --out=data/g2/safe-direction-canary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-safe-12-call-canary-${{ github.run_id }}
+          path: |
+            data/g2/safe-direction-canary-cache.jsonl
+            data/g2/safe-direction-canary.json
+          retention-days: 30
