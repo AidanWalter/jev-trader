@@ -67,6 +67,32 @@ const defaultExecution: ExecutionConfig = {
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
+export interface PortfolioCandidate {
+  symbol: string;
+  target: number;
+  score: number;
+}
+
+export function allocatePortfolioTargets(
+  candidates: PortfolioCandidate[],
+  topN: number,
+  maxGross: number,
+  maxAsset: number,
+  allowShort: boolean,
+) {
+  const ranked = [...candidates].sort((a, b) => b.score - a.score);
+  const selected = new Set(ranked.slice(0, Math.max(1, topN)).map((x) => x.symbol));
+  const raw = new Map<string, number>();
+  for (const c of candidates) {
+    let target = selected.has(c.symbol) ? clamp(c.target, -maxAsset, maxAsset) : 0;
+    if (!allowShort) target = Math.max(0, target);
+    raw.set(c.symbol, target);
+  }
+  const rawGross = [...raw.values()].reduce((s, x) => s + Math.abs(x), 0);
+  const scale = rawGross > maxGross && rawGross > 0 ? maxGross / rawGross : 1;
+  return new Map([...raw.entries()].map(([symbol, target]) => [symbol, target * scale]));
+}
+
 export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioReplayOptions): Promise<PortfolioResult> {
   if (!assets.length) throw new Error("portfolio replay needs at least one asset");
   const n = assets[0]!.bars.length;
@@ -161,22 +187,18 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         candidates.push({ symbol: asset.spec.symbol, target, score });
       }
 
-      candidates.sort((a, b) => b.score - a.score);
-      const selected = new Set(candidates.slice(0, topN).map((x) => x.symbol));
-      const raw = new Map<string, number>();
-      for (const c of candidates) {
-        let target = selected.has(c.symbol) ? clamp(c.target, -maxAsset, maxAsset) : 0;
-        if (!execution.allowShort) target = Math.max(0, target);
-        raw.set(c.symbol, target);
-      }
-
-      const rawGross = [...raw.values()].reduce((s, x) => s + Math.abs(x), 0);
-      const scale = rawGross > maxGross && rawGross > 0 ? maxGross / rawGross : 1;
+      const targets = allocatePortfolioTargets(
+        candidates,
+        topN,
+        maxGross,
+        maxAsset,
+        execution.allowShort,
+      );
 
       for (const asset of assets) {
         const symbol = asset.spec.symbol;
         const currentQ = quantities.get(symbol) ?? 0;
-        const targetExposure = (raw.get(symbol) ?? 0) * scale;
+        const targetExposure = targets.get(symbol) ?? 0;
         const next = asset.bars[nextIndex]!;
         if (!(next.open > 0)) continue;
         const normalMs = typicalIntervals.get(symbol) ?? 0;
