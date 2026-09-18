@@ -31,7 +31,7 @@ jobs:
       - name: Download exact qualified development artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: safe-jev-direction-development-${{ inputs.development_run_id }}
+          pattern: safe-jev-direction-development-canary-*
           path: data/dev
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -50,6 +50,16 @@ jobs:
             --manifest=data/dev/g2-market/universe/universe.json \
             --cache=data/dev/g2/jev-direction-cache.jsonl | tee data/dev/g2/sealed-preflight-rerun.txt
           grep -q "new Jev calls required 1752" data/dev/g2/sealed-preflight-rerun.txt
+      - name: Refuse duplicate sealed evaluation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="safe-jev-direction-sealed-development-${{ inputs.development_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate sealed spend"
+            exit 1
+          fi
       - name: Paid one-time frozen Jev sealed test
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -68,7 +78,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: safe-jev-direction-sealed-${{ inputs.development_run_id }}-${{ github.run_id }}
+          name: safe-jev-direction-sealed-development-${{ inputs.development_run_id }}
           path: |
             data/dev/g2/portfolio-freeze.json
             data/dev/g2/portfolio-selection.json
