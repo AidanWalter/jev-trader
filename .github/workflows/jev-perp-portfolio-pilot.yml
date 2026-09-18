@@ -51,6 +51,10 @@ on:
         description: Modeled slippage per side
         required: true
         default: "1"
+      concurrency:
+        description: Maximum concurrent Jev API calls
+        required: true
+        default: "4"
       max_new_evals:
         description: Hard cap across all fresh Jev calls
         required: true
@@ -131,6 +135,7 @@ jobs:
         run: |
           bun run research/portfolio-pilot.ts data/market/perp-universe/universe.json \
             --model=jev \
+            --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
             --decision-every="${{ inputs.decision_every }}" \
