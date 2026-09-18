@@ -71,6 +71,26 @@ export function buildFeatureState(
   const start = Math.max(1, index - config.recentPoints + 1);
   for (let i = start; i <= index; i++) recentReturnsBps.push(Number(ret(bars, i, 1).toFixed(3)));
 
+  let funding: FeatureState["funding"] | undefined;
+  if (cur.kind === "perp") {
+    const events: { ts: number; bps: number }[] = [];
+    for (let i = index; i >= 0 && events.length < 3; i--) {
+      const b = bars[i]!;
+      if (Number.isFinite(b.fundingBps) && b.fundingBps !== 0) {
+        events.push({ ts: b.ts, bps: b.fundingBps! });
+      }
+    }
+    if (events.length) {
+      funding = {
+        lastBps: Number(events[0]!.bps.toFixed(6)),
+        mean3Bps: Number(mean(events.map((x) => x.bps)).toFixed(6)),
+        hoursSinceLast: Number(((cur.ts - events[0]!.ts) / 3_600_000).toFixed(3)),
+      };
+    } else {
+      funding = { lastBps: 0, mean3Bps: 0, hoursSinceLast: 999 };
+    }
+  }
+
   return {
     symbol: cur.symbol,
     kind: cur.kind,
@@ -101,5 +121,6 @@ export function buildFeatureState(
     volumeRatio20: avgVolume > 0 ? Number((cur.volume / avgVolume).toFixed(3)) : 1,
     trendBps20: sma20 > 0 ? Number(bps(cur.close / sma20 - 1).toFixed(3)) : 0,
     recentReturnsBps,
+    ...(funding ? { funding } : {}),
   };
 }
