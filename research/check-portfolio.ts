@@ -36,6 +36,7 @@ const assets: LoadedAsset[] = ["AAA", "BBB", "CCC"].map((symbol, i) => ({
 
 const result = await replayPortfolio(assets, {
   evaluator: new MockReplayEvaluator(),
+  policy: { minExpectedMoveCostMultiple: 0 },
   maxGrossExposure: 1,
   maxAssetExposure: 0.5,
   topN: 2,
