@@ -1,0 +1,54 @@
+name: generation2-highconf-retune
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-highconf-retune.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  retune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download completed generation-two technical/path cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Verify cache-only inputs
+        run: |
+          test -s data/g2/universe/universe.json
+          test -s data/g2/portfolio-pilot-summary.json
+          test -s data/g2/portfolio-pilot-cache.jsonl
+      - name: Retune with high-confidence Jev gates
+        run: |
+          set -o pipefail
+          bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
+            --pilot=data/g2/portfolio-pilot-summary.json \
+            --cache=data/g2/portfolio-pilot-cache.jsonl \
+            --grid=full \
+            --out=data/g2/highconf-selection.json | tee data/g2/highconf-tune.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-highconf-retune-${{ github.run_id }}
+          path: |
+            data/g2/highconf-selection.json
+            data/g2/highconf-tune.txt
+          retention-days: 30
