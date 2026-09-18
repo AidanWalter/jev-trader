@@ -52,10 +52,19 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       rangeBps: state.rangeBps,
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
-      recentReturnsBps: state.recentReturnsBps,
       ...(state.kind === "perp" ? funding : {}),
       marketContext: state.marketContext,
     };
   }
-  return state;
+  return {
+    ...base,
+    returnsBps: state.returnsBps,
+    realizedVolBps: state.realizedVolBps,
+    rangeBps: state.rangeBps,
+    volumeRatio20: state.volumeRatio20,
+    trendBps20: state.trendBps20,
+    recentReturnsBps: state.recentReturnsBps,
+    ...(state.kind === "perp" ? funding : {}),
+    marketContext: state.marketContext,
+  };
 }
