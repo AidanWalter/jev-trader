@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
 import { mapLimit } from "./concurrency";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
@@ -23,7 +24,8 @@ if (!manifest) {
 }
 
 const modelName = flag("model", "jev")!;
-const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
+const paidModel = modelName.startsWith("jev");
+const concurrency = Math.max(1, Number(flag("concurrency", paidModel ? "1" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12")
   .split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "technical,path,cross,full") ?? "technical,path,cross,full")
@@ -44,6 +46,15 @@ const directionThresholdFixedCostBps = Number(flag(
   "direction-threshold-fixed-cost-bps",
   String(2 * slippageBps + 2 * feeBps),
 ));
+const spendLedger = paidModel
+  ? new SpendBudgetLedger(defaultSpendBudget({
+      maxRequests: Math.max(1, Number(flag("max-paid-requests", "50"))),
+      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "125000"))),
+      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.01"))),
+      usdPerMTok,
+      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
+    }))
+  : null;
 
 const rawAssets = loadUniverse(manifest);
 for (const asset of rawAssets) assertResearchDataQuality(asset.bars);
@@ -117,6 +128,7 @@ for (const horizonBars of horizons) {
   const allStates = candidateStates(horizonBars);
   for (const profile of profiles) {
     const raw = createReplayEvaluator(modelName, profile);
+    const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
     const missing = allStates.filter((x) => !cache.has(raw.name, x.state));
     const remainingBudget = Math.max(0, maxNewEvaluations - usedNewEvaluations);
     const sample = stratifiedSample(missing, Math.min(samplePerCell, remainingBudget));
@@ -134,7 +146,7 @@ for (const horizonBars of horizons) {
       continue;
     }
 
-    const evaluator = new CachedEvaluator(raw, cache, sample.length);
+    const evaluator = new CachedEvaluator(paidRaw, cache, sample.length);
     const observed = await mapLimit(sample, concurrency, async (row) => {
       const signal = await evaluator.evaluate(row.state);
       return {
@@ -206,6 +218,8 @@ const summary = {
   usdPerMTok,
   execution: { feeBps, slippageBps },
   features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
+  spendBudget: spendLedger?.budget ?? null,
+  spend: spendLedger?.snapshot() ?? null,
   cells,
 };
 
@@ -213,4 +227,5 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(summary, null, 2) + "\n");
 console.log("wrote " + outPath);
 console.log("fresh probe tokens " + freshInputTokens + " · estimated probe cost $" + summary.actualProbeCostUsd.toFixed(6));
+if (spendLedger) console.log("HARD SPEND RECEIPT " + JSON.stringify(spendLedger.snapshot()));
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
