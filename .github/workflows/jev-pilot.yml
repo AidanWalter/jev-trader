@@ -31,6 +31,10 @@ on:
         description: Evaluate every N bars
         required: true
         default: "4"
+      concurrency:
+        description: Maximum concurrent Jev API calls
+        required: true
+        default: "4"
       max_new_evals:
         description: Hard cap across the entire pilot
         required: true
@@ -95,6 +99,7 @@ jobs:
             --symbol="${{ inputs.symbol }}" \
             --kind=spot \
             --model=jev \
+            --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
             --decision-every="${{ inputs.decision_every }}" \
