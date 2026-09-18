@@ -68,6 +68,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
 const result = await replayBars(bars, {
   evaluator: new OracleEvaluator(bars, horizonBars),
   features: { horizonBars },
+  endIndex: bars.length - horizonBars - 1,
   decisionEveryBars: Math.max(1, Number(flag("decision-every", "4"))),
   execution: {
     initialCash: Number(flag("cash", "100")),
