@@ -52,11 +52,13 @@ jobs:
           SELECTION="$(find prior -name selection.json -print -quit)"
           PILOT="$(find prior -name pilot.json -print -quit)"
           CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          AUDIT="$(find prior -name validation-audit.json -print -quit)"
           MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
           test -n "$FREEZE"
           test -n "$SELECTION"
           test -n "$PILOT"
           test -n "$CACHE"
+          test -n "$AUDIT"
           test -n "$MANIFEST"
           jq -e '
             .qualification.passed == true and
@@ -64,6 +66,7 @@ jobs:
             .chosen.profile == "lean" and
             .chosen.horizonBars == 8
           ' "$SELECTION" >/dev/null
+          jq -e '.passed == true and .positiveSegments == .segmentCount' "$AUDIT" >/dev/null
           jq -e '
             .modelName == "jev-direction" and
             .profiles == ["lean"] and
@@ -75,6 +78,7 @@ jobs:
           cp -R "$(dirname "$MANIFEST")" data/sealed/universe
           cp "$FREEZE" data/sealed/freeze.json
           cp "$SELECTION" data/sealed/selection.json
+          cp "$AUDIT" data/sealed/validation-audit.json
           cp "$PILOT" data/sealed/pilot.json
           cp "$CACHE" data/sealed/jev-direction-cache.jsonl
 
@@ -128,6 +132,7 @@ jobs:
           path: |
             data/sealed/freeze.json
             data/sealed/selection.json
+            data/sealed/validation-audit.json
             data/sealed/pilot.json
             data/sealed/jev-direction-cache.jsonl
             data/sealed/preflight.txt
