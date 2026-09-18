@@ -365,6 +365,16 @@ jobs:
             --cache=data/mock-stock-public-cache.jsonl \
             --max-new-evals=100000 \
             --out=data/mock-stock-public-sealed.json | tee data/mock-stock-public-output.txt
+      - name: Initialize frozen Yahoo stock forward-paper state
+        run: |
+          bun run research/live-frozen-yahoo-stock-portfolio-paper.ts data/mock-stock-public-freeze.json \
+            --cache=data/mock-stock-public-cache.jsonl \
+            --cycles=1 \
+            --state=data/mock-stock-public-live-state.json \
+            --events=data/mock-stock-public-live-events.jsonl
+          test -s data/mock-stock-public-live-state.json
+          test -s data/mock-stock-public-live-events.jsonl
+          grep -q '"version": "frozen-yahoo-stock-portfolio-paper-v1"' data/mock-stock-public-live-state.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -376,6 +386,8 @@ jobs:
             data/mock-stock-public-preflight.txt
             data/mock-stock-public-output.txt
             data/mock-stock-public-sealed.json
+            data/mock-stock-public-live-state.json
+            data/mock-stock-public-live-events.jsonl
           retention-days: 14
 
   forward-paper-smoke:
