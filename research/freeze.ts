@@ -22,6 +22,7 @@ interface SelectedPolicyFile {
 interface ApparatusSelectionFile {
   version: "apparatus-selection-v1";
   decisionEveryBars: number;
+  evaluatorKind: string;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
   features: { directionThresholdBpsFloor: number };
   chosen: {
@@ -38,7 +39,7 @@ function normalizeSelection(raw: SelectedPolicyFile | ApparatusSelectionFile): S
   if ((raw as ApparatusSelectionFile).version === "apparatus-selection-v1") {
     const s = raw as ApparatusSelectionFile;
     return {
-      evaluatorKind: "jev",
+      evaluatorKind: s.evaluatorKind,
       evaluatorNamespace: s.chosen.evaluatorNamespace,
       profile: s.chosen.profile,
       horizonBars: s.chosen.horizonBars,
