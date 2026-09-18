@@ -63,7 +63,7 @@ jobs:
             --state=data/mock-frozen-paper-state.json \
             --events=data/mock-frozen-paper-events.jsonl
           test -s data/mock-frozen-paper-state.json
-          grep -q '"version": "frozen-binance-paper-v1"' data/mock-frozen-paper-state.json
+          grep -q '"version": "frozen-binance-paper-v2"' data/mock-frozen-paper-state.json
       - name: Momentum baseline
         run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
