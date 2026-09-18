@@ -1,0 +1,107 @@
+name: jev-direction-sample
+
+on:
+  workflow_dispatch:
+    inputs:
+      canary_run_id:
+        description: Successful jev-direction-canary run ID whose dashboard usage you personally verified
+        required: true
+      dashboard_verified:
+        description: I checked TypeSafe billing and the canary usage matched the artifact closely
+        required: true
+        type: boolean
+        default: false
+      confirm_spend:
+        description: I approve at most 240 fresh requests under a hard $0.025 ledger cap
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sample:
+    if: ${{ inputs.dashboard_verified == true && inputs.confirm_spend == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download personally verified canary artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-canary-${{ inputs.canary_run_id }}
+          path: prior
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.canary_run_id }}
+
+      - name: Verify and restore exact canary dataset and cache
+        run: |
+          set -euo pipefail
+          RESULT="$(find prior -name jev-direction-canary.json -print -quit)"
+          CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
+          test -n "$RESULT"
+          test -n "$CACHE"
+          test -n "$MANIFEST"
+          jq -e '
+            .version == "safe-jev-direction-probe-v1" and
+            .horizonBars == 8 and
+            .profile == "lean" and
+            .decisionEveryBars == 8 and
+            .sampleCount == 12 and
+            .budget.requestsStarted <= 12 and
+            .budget.estimatedUsd <= 0.0015
+          ' "$RESULT" >/dev/null
+          mkdir -p data/sample
+          cp -R "$(dirname "$MANIFEST")" data/sample/universe
+          cp "$CACHE" data/sample/jev-direction-cache.jsonl
+          cp "$RESULT" data/sample/canary.json
+
+      - name: Print zero-call expanded sample budget
+        run: |
+          echo "Hard limits: 240 fresh requests, 500000 input tokens, $0.025."
+          echo "The first 12 deterministic sample states are already cached from the verified canary."
+          echo "At the 2000-token reservation, the full 240-request worst-case reservation is 480000 tokens = $0.02016 at $0.042/MTok."
+
+      - name: Run nested 240-state Jev direction sample
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/safe-jev-direction-probe.ts data/sample/universe/universe.json \
+            --horizon=8 \
+            --profile=lean \
+            --decision-every=8 \
+            --sample=240 \
+            --max-requests=240 \
+            --max-input-tokens=500000 \
+            --reserve-input-tokens=2000 \
+            --max-usd=0.025 \
+            --usd-per-mtok=0.042 \
+            --concurrency=1 \
+            --cache=data/sample/jev-direction-cache.jsonl \
+            --out=data/sample/jev-direction-sample.json | tee data/sample/sample-output.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-direction-sample-${{ github.run_id }}
+          path: |
+            data/sample/universe/
+            data/sample/canary.json
+            data/sample/jev-direction-cache.jsonl
+            data/sample/jev-direction-sample.json
+            data/sample/sample-output.txt
+          retention-days: 30
