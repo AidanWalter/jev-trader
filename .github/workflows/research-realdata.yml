@@ -34,7 +34,7 @@ jobs:
             --kind=spot \
             --model=mock \
             --horizons=6,12 \
-            --profiles=full \
+            --profiles=cross,full \
             --decision-every=8 \
             --sample-per-cell=3 \
             --max-new-evals=6 \
@@ -139,7 +139,7 @@ jobs:
           bun run research/portfolio-pilot.ts data/market/universe.json \
             --model=mock \
             --horizons=6,12 \
-            --profiles=full \
+            --profiles=cross,full \
             --decision-every=8 \
             --max-new-evals=100000 \
             --top-n=2 \
@@ -243,7 +243,7 @@ jobs:
           bun run research/portfolio-pilot.ts data/market/perp-universe/universe.json \
             --model=mock \
             --horizons=6,12 \
-            --profiles=full \
+            --profiles=cross,full \
             --decision-every=8 \
             --top-n=2 \
             --max-gross=1 \
@@ -331,7 +331,7 @@ jobs:
           bun run research/portfolio-pilot.ts data/market/stock-public-universe.json \
             --model=mock \
             --horizons=6,12 \
-            --profiles=full \
+            --profiles=cross,full \
             --decision-every=4 \
             --top-n=2 \
             --max-gross=1 \
