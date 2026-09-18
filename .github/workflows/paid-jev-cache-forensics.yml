@@ -1,0 +1,181 @@
+name: paid-jev-cache-forensics
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/paid-jev-cache-forensics.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download generation-one pilot
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-pilot-resume-35384350443
+          path: paid/gen1-pilot
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35384350443
+
+      - name: Download generation-one sealed
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-sealed-autostart-35386077427
+          path: paid/gen1-sealed
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35386077427
+
+      - name: Download fresh-window partial
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-fresh-window-35387104158
+          path: paid/fresh-window
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35387104158
+
+      - name: Download generation-two perp partial
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gen2-perp-jev-pilot-35388518829
+          path: paid/gen2-perp-pilot
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388518829
+
+      - name: Download generation-two spot probe
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-probe-35389140482
+          path: paid/gen2-spot-probe
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389140482
+
+      - name: Download generation-two concurrency check
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-concurrency-check-35389318272
+          path: paid/gen2-concurrency
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389318272
+
+      - name: Download generation-two spot partial
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: paid/gen2-spot-partial-a
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Download expanded generation-two probe
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-probe-35390262714
+          path: paid/gen2-spot-probe-expanded
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35390262714
+
+      - name: Download generation-two spot partial full matrix
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35390431142
+          path: paid/gen2-spot-partial-b
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35390431142
+
+      - name: Download generation-two perp resume
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gen2-perp-jev-resume-35390471917
+          path: paid/gen2-perp-resume
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35390471917
+
+      - name: Inventory and audit every paid cache against realized market moves
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p paid/audits
+          find paid -maxdepth 5 -type f | sort | tee paid/file-inventory.txt
+
+          for dir in paid/*; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            manifest="$(find "$dir" -type f -name 'universe.json' | head -1 || true)"
+            caches="$(find "$dir" -type f -name '*cache*.jsonl' | sort | paste -sd, - || true)"
+            if [ -z "$manifest" ] || [ -z "$caches" ]; then
+              echo "SKIP $name · manifest=$manifest · caches=$caches"
+              continue
+            fi
+            echo "AUDIT $name"
+            echo "  manifest $manifest"
+            echo "  caches $caches"
+            bun run research/audit-paid-cache.ts "$manifest" \
+              --cache="$caches" \
+              --fee-bps=4 \
+              --slippage-bps=1 \
+              --out="paid/audits/$name.json" | tee "paid/audits/$name.txt"
+          done
+
+      - name: Print compact forensic summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in paid/audits/*.json; do
+            [ -e "$f" ] || continue
+            echo "===== $(basename "$f") ====="
+            jq '{
+              rawRecords,
+              uniqueMatchedRecords,
+              skipped,
+              overall,
+              byProfile,
+              byHorizon,
+              bySymbol,
+              byChoice,
+              byConfidenceBin,
+              byTimeQuartile
+            }' "$f"
+          done | tee paid/forensic-summary.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paid-jev-cache-forensics-${{ github.run_id }}
+          path: |
+            paid/file-inventory.txt
+            paid/audits/
+            paid/forensic-summary.txt
+          retention-days: 90
