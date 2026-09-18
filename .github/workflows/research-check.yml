@@ -39,6 +39,8 @@ jobs:
         run: bun run research:check-live-boundary
       - name: Concurrent cache budget regression
         run: bun run research:check-cache-concurrency
+      - name: Paid spend-cap and direction-only regression
+        run: bun run research:check-spend-budget
       - name: Safe Jev budget and direction-only regression
         run: bun run research:check-safe-jev
       - name: Fill ordering regression
