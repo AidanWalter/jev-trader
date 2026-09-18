@@ -6,6 +6,10 @@ on:
       pilot_run_id:
         description: Workflow run ID from a completed jev-stock-portfolio-pilot run
         required: true
+      concurrency:
+        description: Maximum concurrent Jev API calls during sealed prefetch
+        required: true
+        default: "4"
       max_new_evals:
         description: Hard cap on fresh Jev calls for the sealed stock portfolio test
         required: true
@@ -67,6 +71,7 @@ jobs:
             --manifest=data/market/stock-universe/universe.json \
             --cache=data/stock-portfolio-pilot-cache.jsonl \
             --max-new-evals="${{ inputs.max_new_evals }}" \
+            --concurrency="${{ inputs.concurrency }}" \
             --out=data/stock-portfolio-sealed-result.json | tee data/stock-portfolio-sealed-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
