@@ -1,6 +1,7 @@
 import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
@@ -24,6 +25,7 @@ if (!file) {
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
 const modelName = flag("model", "jev")!;
+const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12").split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,technical,path,full")
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
@@ -97,15 +99,12 @@ for (const horizonBars of horizons) {
     }
 
     const evaluator = new CachedEvaluator(raw, cache, sample.length);
-    let tokenSum = 0;
-    let latencySum = 0;
-    const observed: { ts: number; inputTokens: number; latencyMs: number }[] = [];
-    for (const state of sample) {
+    const observed = await mapLimit(sample, concurrency, async (state) => {
       const signal = await evaluator.evaluate(state);
-      tokenSum += signal.inputTokens;
-      latencySum += signal.latencyMs;
-      observed.push({ ts: state.ts, inputTokens: signal.inputTokens, latencyMs: signal.latencyMs });
-    }
+      return { ts: state.ts, inputTokens: signal.inputTokens, latencyMs: signal.latencyMs };
+    });
+    const tokenSum = observed.reduce((s, x) => s + x.inputTokens, 0);
+    const latencySum = observed.reduce((s, x) => s + x.latencyMs, 0);
     usedNewEvaluations += evaluator.newEvaluations;
     totalFreshTokens += evaluator.newInputTokens;
 
@@ -167,6 +166,7 @@ const summary = {
   decisionEveryBars,
   samplePerCell,
   maxNewEvaluations,
+  concurrency,
   usedNewEvaluations,
   freshInputTokens: totalFreshTokens,
   actualProbeCostUsd: totalFreshTokens / 1e6 * usdPerMTok,
