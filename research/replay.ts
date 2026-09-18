@@ -114,6 +114,8 @@ export interface ReplayOptions {
   features?: Partial<FeatureConfig>;
   startIndex?: number;
   endIndex?: number;
+  /** Ask the evaluator every N bars; the current position persists between decisions. */
+  decisionEveryBars?: number;
 }
 
 export async function replayBars(input: MarketBar[], options: ReplayOptions): Promise<ReplayResult> {
@@ -127,6 +129,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
   const features = { ...defaultFeatureConfig, ...options.features };
   const start = Math.max(features.minHistoryBars, options.startIndex ?? features.minHistoryBars);
   const end = Math.min(bars.length - 2, options.endIndex ?? bars.length - 2);
+  const decisionEveryBars = Math.max(1, Math.floor(options.decisionEveryBars ?? 1));
   if (start > end) throw new Error("not enough bars after feature warmup");
 
   let cash = execution.initialCash;
@@ -157,6 +160,13 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
 
     if (bar.kind === "perp" && bar.fundingBps) {
       cash -= quantity * bar.close * bar.fundingBps / 10_000;
+    }
+
+    if ((i - start) % decisionEveryBars !== 0) {
+      const eq = mark(next.close);
+      equity.push({ ts: next.ts, equity: eq, cash, quantity, exposure: exposure(next.close) });
+      if (!Number.isFinite(eq) || eq <= 0) break;
+      continue;
     }
 
     const state = buildFeatureState(bars, i, features);
