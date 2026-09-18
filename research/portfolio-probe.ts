@@ -18,7 +18,7 @@ const flag = (name: string, fallback?: string) => {
 };
 const manifest = args.find((x) => !x.startsWith("--"));
 if (!manifest) {
-  console.error("usage: bun run research/portfolio-probe.ts universe.json --model=jev --horizons=6,12 --profiles=technical,path,full");
+  console.error("usage: bun run research/portfolio-probe.ts universe.json --model=jev --horizons=6,12 --profiles=technical,path,cross,full");
   process.exit(1);
 }
 
@@ -26,7 +26,7 @@ const modelName = flag("model", "jev")!;
 const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12")
   .split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
-const profiles = (flag("profiles", "technical,path,full") ?? "technical,path,full")
+const profiles = (flag("profiles", "technical,path,cross,full") ?? "technical,path,cross,full")
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "8")));
 const samplePerCell = Math.max(1, Number(flag("sample-per-cell", "6")));
