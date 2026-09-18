@@ -1,0 +1,76 @@
+name: jev-direction-canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_spend:
+        description: I understand this makes at most 12 fresh Jev requests under a hard $0.0015 ledger cap
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    if: ${{ inputs.confirm_spend == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download fixed public BTC ETH SOL universe
+        run: |
+          bun run scripts/download-binance-universe.ts \
+            --symbols=BTCUSDT,ETHUSDT,SOLUSDT \
+            --interval=1h \
+            --start=2024-01-01 \
+            --end=2026-09-01 \
+            --out-dir=data/canary/universe \
+            --manifest=data/canary/universe/universe.json
+
+      - name: Zero-call spend plan
+        run: |
+          bun run research/jev-spend-plan.ts data/canary/universe/universe.json \
+            --horizon=8 \
+            --decision-every=8 \
+            --tokens-per-request=2000 | tee data/canary/spend-plan.txt
+
+      - name: Run 12-request direction-only Jev canary
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/safe-jev-direction-probe.ts data/canary/universe/universe.json \
+            --horizon=8 \
+            --profile=lean \
+            --decision-every=8 \
+            --sample=12 \
+            --max-requests=12 \
+            --max-input-tokens=30000 \
+            --reserve-input-tokens=2000 \
+            --max-usd=0.0015 \
+            --usd-per-mtok=0.042 \
+            --concurrency=1 \
+            --cache=data/canary/jev-direction-cache.jsonl \
+            --out=data/canary/jev-direction-canary.json | tee data/canary/canary-output.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-direction-canary-${{ github.run_id }}
+          path: |
+            data/canary/universe/
+            data/canary/spend-plan.txt
+            data/canary/jev-direction-cache.jsonl
+            data/canary/jev-direction-canary.json
+            data/canary/canary-output.txt
+          retention-days: 30
