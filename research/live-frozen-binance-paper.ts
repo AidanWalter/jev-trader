@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
 import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import { choosePolicyAction } from "./policy";
@@ -88,12 +89,26 @@ const eventsPath = flag("events", "data/frozen-paper-" + symbol.toLowerCase() + 
 const cachePath = flag("cache", "data/jev-pilot-cache.jsonl")!;
 const pollMs = Math.max(1000, Number(flag("poll-ms", "5000")));
 const cycles = Math.max(0, Number(flag("cycles", "0")));
-const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", freeze.evaluator.kind === "jev" ? "1000" : "1000000000")));
+const paidModel = freeze.evaluator.kind.startsWith("jev");
+if (paidModel && flag("confirm-paid", "false") !== "true") {
+  throw new Error("paid Jev live paper is locked; pass --confirm-paid=true with explicit spend caps");
+}
+const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", paidModel ? "12" : "1000000000")));
+const spendLedger = paidModel
+  ? new SpendBudgetLedger(defaultSpendBudget({
+      maxRequests: Math.max(1, Number(flag("max-paid-requests", "12"))),
+      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "30000"))),
+      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.002"))),
+      usdPerMTok: Number(flag("usd-per-mtok", "0.042")),
+      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
+    }))
+  : null;
 
 const raw = createReplayEvaluator(freeze.evaluator.kind, freeze.evaluator.profile);
 if (raw.name !== freeze.evaluator.namespace) throw new Error("evaluator namespace differs from frozen apparatus");
+const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
 const cache = new JsonlSignalCache(cachePath);
-const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
+const evaluator = new CachedEvaluator(paidRaw, cache, maxNewEvaluations);
 
 const featureConfig = {
   ...defaultFeatureConfig,
