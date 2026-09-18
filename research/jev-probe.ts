@@ -22,6 +22,7 @@ if (!file) {
 
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
+const modelName = flag("model", "jev")!;
 const horizons = (flag("horizons", "6,12") ?? "6,12").split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,technical,path,full")
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
@@ -76,7 +77,7 @@ const rows: any[] = [];
 for (const horizonBars of horizons) {
   const states = candidateStates(horizonBars);
   for (const profile of profiles) {
-    const raw = createReplayEvaluator("jev", profile);
+    const raw = createReplayEvaluator(modelName, profile);
     const missingBefore = states.filter((s) => !cache.has(raw.name, s));
     const sample = evenlySample(missingBefore, Math.min(samplePerCell, Math.max(0, maxNewEvaluations - usedNewEvaluations)));
     if (!sample.length) {
@@ -147,6 +148,7 @@ const summary = {
   createdAt: Date.now(),
   symbol,
   kind,
+  modelName,
   dataset: {
     file,
     sha256: datasetHasher.digest("hex"),
