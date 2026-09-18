@@ -3,7 +3,7 @@ import { typeSafeAi } from "@ai-sdk/typesafe-ai";
 import { projectState, type InputProfile } from "./profiles";
 import type { Direction, FeatureState, JevSignal, Magnitude, SignalEvaluator } from "./types";
 
-export const SIGNAL_VERSION = "replay-signal-v3";
+export const SIGNAL_VERSION = "replay-signal-v4";
 
 const QUESTIONS = {
   direction: {
@@ -11,7 +11,7 @@ const QUESTIONS = {
     instructions: {
       question: "Over the next horizonBars, which state is most likely: higher by more than directionThresholdBps, within plus/minus directionThresholdBps, or lower by more than directionThresholdBps?",
       goal: "Forecast price direction from information available at this timestamp only. Return probabilities, not trading advice. The downstream policy handles position sizing, fees, and risk.",
-      inputs: "Use only fields present in the supplied state. spreadBps is the current execution-friction estimate.",
+      inputs: "Use only fields present in the supplied state. spreadBps is the current execution-friction estimate. For perpetuals, funding contains realized funding information known at this timestamp; use it only as market context, since this question forecasts price direction rather than total carry-adjusted return.",
     },
     criteria: {
       long: "Future close is more than directionThresholdBps above the current price.",
