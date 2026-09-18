@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { BudgetedEvaluator } from "./paid-budget";
+import { BudgetedEvaluator, SpendBudgetLedger } from "./budget";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
@@ -103,12 +103,14 @@ function stratifiedSample(input: Row[], n: number) {
 
 const sample = stratifiedSample(rows, sampleCount);
 const raw = createReplayEvaluator("jev-direction", profile);
-const budgeted = new BudgetedEvaluator(raw, {
+const ledger = new SpendBudgetLedger({
   maxRequests,
   maxInputTokens,
-  reserveInputTokensPerRequest,
+  maxUsd: maxInputTokens / 1_000_000 * usdPerMTok,
   usdPerMTok,
+  reserveTokensPerRequest: reserveInputTokensPerRequest,
 });
+const budgeted = new BudgetedEvaluator(raw, ledger);
 const cache = new JsonlSignalCache(cachePath);
 const evaluator = new CachedEvaluator(budgeted, cache, maxRequests);
 
@@ -162,7 +164,7 @@ const result = {
   trainOnly: true,
   sampleCount,
   sealedTestBars: split.test.length,
-  budget: budgeted.snapshot(),
+  budget: ledger.snapshot(),
   cache: { path: cachePath, hits: cache.hits, misses: cache.misses, size: cache.size },
   metrics: {
     accuracyPct: accuracy * 100,
@@ -179,9 +181,9 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(result, null, 2) + "\n");
 
 console.log("SAFE JEV DIRECTION PROBE");
-console.log("requests started " + budgeted.requestsStarted + "/" + maxRequests);
-console.log("provider-reported input tokens " + budgeted.inputTokens + "/" + maxInputTokens);
-console.log("estimated cost from reported tokens $" + budgeted.estimatedUsd.toFixed(6));
+console.log("requests started " + ledger.snapshot().requestsStarted + "/" + maxRequests);
+console.log("provider-reported input tokens " + ledger.snapshot().inputTokens + "/" + maxInputTokens);
+console.log("estimated cost from reported tokens $" + ledger.snapshot().estimatedUsd.toFixed(6));
 console.log("accuracy " + result.metrics.accuracyPct.toFixed(1) + "% · Brier " + result.metrics.brier.toFixed(4));
 console.log("called " + result.metrics.calledBpsPerState.toFixed(2) + " bps/state · net " + result.metrics.netCalledBpsPerState.toFixed(2) + " bps/state");
 console.log("avg input " + result.metrics.avgInputTokens.toFixed(0) + " tokens · latency " + result.metrics.avgLatencyMs.toFixed(1) + " ms");
