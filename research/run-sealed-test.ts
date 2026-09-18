@@ -1,9 +1,11 @@
 import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
+import { buildFeatureState, defaultFeatureConfig } from "./features";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
@@ -82,16 +84,41 @@ if (raw.name !== record.evaluator.namespace) {
 }
 
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "0")));
+const concurrency = Math.max(1, Number(flag("concurrency", record.evaluator.kind === "jev" ? "4" : "8")));
 const outPath = flag("out");
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
+
+const sealedFeatureConfig = {
+  ...defaultFeatureConfig,
+  horizonBars: record.features.horizonBars,
+  directionThresholdBpsFloor: record.features.directionThresholdBpsFloor ?? 1,
+  directionThresholdFixedCostBps: record.features.directionThresholdFixedCostBps ?? 0,
+};
+const sealedStart = Math.max(sealedFeatureConfig.minHistoryBars, ranges.test.start);
+const sealedEnd = ranges.test.end - record.features.horizonBars - 1;
+const missingStates = [];
+for (let i = sealedStart; i <= sealedEnd; i += record.cadence.decisionEveryBars) {
+  const state = buildFeatureState(bars, i, sealedFeatureConfig);
+  if (state && !cache.has(raw.name, state)) missingStates.push(state);
+}
+if (missingStates.length > maxNewEvaluations) {
+  throw new Error(
+    "sealed test requires " + missingStates.length +
+    " fresh evaluations but --max-new-evals=" + maxNewEvaluations +
+    "; no Jev calls were made"
+  );
+}
+await mapLimit(missingStates, concurrency, (state) => evaluator.evaluate(state));
+console.log(
+  "sealed prefetch · missing " + missingStates.length +
+  " · concurrency " + concurrency +
+  " · fresh tokens " + evaluator.newInputTokens
+);
+
 const result = await replayBars(bars, {
   evaluator,
   policy: record.policy,
-  features: {
-    horizonBars: record.features.horizonBars,
-    directionThresholdBpsFloor: record.features.directionThresholdBpsFloor ?? 1,
-    directionThresholdFixedCostBps: record.features.directionThresholdFixedCostBps ?? 0,
-  },
+  features: sealedFeatureConfig,
   startIndex: ranges.test.start,
   endIndex: ranges.test.end - record.features.horizonBars - 1,
   decisionEveryBars: record.cadence.decisionEveryBars,
@@ -124,6 +151,8 @@ if (outPath) {
     freeze: freezePath,
     datasetSha256: actualHash,
     evaluatorNamespace: raw.name,
+    concurrency,
+    prefetchedMissingStates: missingStates.length,
     newEvaluations: evaluator.newEvaluations,
     freshInputTokens: evaluator.newInputTokens,
     result,
