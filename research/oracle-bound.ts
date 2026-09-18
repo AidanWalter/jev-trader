@@ -66,9 +66,10 @@ const horizons = (flag("horizons", flag("horizon", "12")) ?? "12")
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
-const directionThresholdBpsFloor = Number(flag(
-  "direction-threshold-bps",
-  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+const directionThresholdBpsFloor = Number(flag("direction-threshold-bps-floor", "1"));
+const directionThresholdFixedCostBps = Number(flag(
+  "direction-threshold-fixed-cost-bps",
+  String(2 * slippageBps + 2 * feeBps),
 ));
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
@@ -77,7 +78,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
 for (const horizonBars of horizons) {
   const result = await replayBars(bars, {
     evaluator: new OracleEvaluator(bars, horizonBars),
-    features: { horizonBars, directionThresholdBpsFloor },
+    features: { horizonBars, directionThresholdBpsFloor, directionThresholdFixedCostBps },
     endIndex: bars.length - horizonBars - 1,
     decisionEveryBars: Math.max(1, Number(flag("decision-every", "4"))),
     execution: {
