@@ -63,9 +63,10 @@ jobs:
             .budget.requestsStarted <= 240 and
             .budget.estimatedUsd <= 0.025 and
             .metrics.brier < 0.6666667 and
+            .metrics.nonFlatCount >= 40 and
             (
-              (.metrics.confidenceGates | any(.threshold >= 0.50 and .n >= 20 and .netCalledBpsPerState > 0)) or
-              (.metrics.edgeGates | any(.threshold >= 0.20 and .n >= 20 and .netCalledBpsPerState > 0))
+              (.metrics.confidenceGates | any(.threshold >= 0.55 and .n >= 30 and .netCalledBpsPerState > 3)) or
+              (.metrics.edgeGates | any(.threshold >= 0.20 and .n >= 30 and .netCalledBpsPerState > 3))
             )
           ' "$RESULT" >/dev/null
           mkdir -p data/dev
