@@ -86,7 +86,7 @@ const result = await replayBars(bars, {
   policy: record.policy,
   features: { horizonBars: record.features.horizonBars },
   startIndex: ranges.test.start,
-  endIndex: ranges.test.end - 2,
+  endIndex: ranges.test.end - record.features.horizonBars - 1,
   decisionEveryBars: record.cadence.decisionEveryBars,
   execution: {
     initialCash: record.execution.initialCash,
