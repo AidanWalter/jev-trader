@@ -31,6 +31,10 @@ const initialCash = Number(flag("cash", "100"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 const allowShort = flag("allow-short", "true") !== "false";
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "1000" : "1000000000")));
@@ -56,7 +60,7 @@ const evaluator = new CachedEvaluator(rawEvaluator, cache, maxNewEvaluations);
 const result = await replayBars(bars, {
   evaluator,
   policy,
-  features: { horizonBars },
+  features: { horizonBars, directionThresholdBpsFloor },
   decisionEveryBars,
   execution: {
     initialCash,
