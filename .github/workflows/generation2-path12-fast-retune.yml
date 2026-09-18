@@ -36,13 +36,15 @@ jobs:
           jq '.cells = [.cells[] | select(.profile == "path" and .horizonBars == 12)]' \
             data/g2/portfolio-pilot-summary.json > data/g2/path12-pilot.json
           jq -e '.cells | length == 1' data/g2/path12-pilot.json >/dev/null
-      - name: Fast high-confidence cache-only retune
+      - name: Direction-only cache replay at slower cadences
         run: |
           set -o pipefail
           bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
             --pilot=data/g2/path12-pilot.json \
             --cache=data/g2/portfolio-pilot-cache.jsonl \
             --grid=fast \
+            --direction-only=true \
+            --cadences=24,32,48 \
             --out=data/g2/path12-fast-selection.json | tee data/g2/path12-fast-tune.txt
       - uses: actions/upload-artifact@v4
         if: always()
