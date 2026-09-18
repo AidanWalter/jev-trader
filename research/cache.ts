@@ -78,18 +78,43 @@ export class JsonlSignalCache {
   get size() { return this.records.size; }
 }
 
+export interface EvaluationBudget {
+  /** Hard cap on fresh provider calls. */
+  maxNewEvaluations?: number;
+  /** Hard pre-call budget using a conservative reservation per fresh evaluation. */
+  maxFreshInputTokens?: number;
+  /** Tokens reserved before each fresh call. Set above observed per-call input usage. */
+  reserveInputTokensPerEvaluation?: number;
+}
+
 export class CachedEvaluator implements SignalEvaluator {
   readonly name: string;
   newEvaluations = 0;
   newInputTokens = 0;
+  private reservedInputTokens = 0;
   private inFlight = new Map<string, Promise<JevSignal>>();
+  readonly maxNewEvaluations: number;
+  readonly maxFreshInputTokens: number;
+  readonly reserveInputTokensPerEvaluation: number;
 
   constructor(
     private inner: SignalEvaluator,
     readonly cache: JsonlSignalCache,
-    readonly maxNewEvaluations = Infinity,
+    maxNewEvaluationsOrBudget: number | EvaluationBudget = Infinity,
   ) {
     this.name = "cached:" + inner.name;
+    if (typeof maxNewEvaluationsOrBudget === "number") {
+      this.maxNewEvaluations = maxNewEvaluationsOrBudget;
+      this.maxFreshInputTokens = Infinity;
+      this.reserveInputTokensPerEvaluation = 0;
+    } else {
+      this.maxNewEvaluations = maxNewEvaluationsOrBudget.maxNewEvaluations ?? Infinity;
+      this.maxFreshInputTokens = maxNewEvaluationsOrBudget.maxFreshInputTokens ?? Infinity;
+      this.reserveInputTokensPerEvaluation = Math.max(
+        0,
+        maxNewEvaluationsOrBudget.reserveInputTokensPerEvaluation ?? 0,
+      );
+    }
   }
 
   async evaluate(state: FeatureState): Promise<JevSignal> {
@@ -103,11 +128,24 @@ export class CachedEvaluator implements SignalEvaluator {
     if (this.newEvaluations >= this.maxNewEvaluations) {
       throw new Error(`new-evaluation limit reached (${this.maxNewEvaluations}); increase --max-new-evals deliberately`);
     }
+    const reserve = this.reserveInputTokensPerEvaluation;
+    if (this.newInputTokens + this.reservedInputTokens + reserve > this.maxFreshInputTokens) {
+      throw new Error(
+        `fresh-input-token budget would be exceeded: used ${this.newInputTokens}, reserved ${this.reservedInputTokens}, next reserve ${reserve}, cap ${this.maxFreshInputTokens}`,
+      );
+    }
+
     this.newEvaluations++;
+    this.reservedInputTokens += reserve;
 
     const work = (async () => {
       const signal = await this.inner.evaluate(state);
       this.newInputTokens += signal.inputTokens;
+      if (signal.inputTokens > reserve && reserve > 0) {
+        console.warn(
+          `Jev call used ${signal.inputTokens} input tokens, above the ${reserve}-token pre-call reservation`,
+        );
+      }
       return this.cache.put(this.inner.name, state, signal);
     })();
     this.inFlight.set(key, work);
@@ -115,6 +153,7 @@ export class CachedEvaluator implements SignalEvaluator {
     try {
       return await work;
     } finally {
+      this.reservedInputTokens -= reserve;
       this.inFlight.delete(key);
     }
   }
