@@ -77,7 +77,7 @@ console.log(`model ${rawEvaluator.name} · bars ${bars.length} · every ${decisi
 console.log(`P&L $${m.pnl.toFixed(2)} · return ${m.returnPct.toFixed(2)}% · buy/hold ${m.buyHoldReturnPct.toFixed(2)}%`);
 console.log(`max DD ${m.maxDrawdownPct.toFixed(2)}% · Sharpe ${m.sharpe === null ? "n/a" : m.sharpe.toFixed(2)} · turnover ${m.turnover.toFixed(1)}x`);
 console.log(`orders ${m.orders} · round trips ${m.roundTrips} · wins ${m.wins} · losses ${m.losses} · win rate ${m.winRatePct === null ? "n/a" : m.winRatePct.toFixed(1) + "%"}`);
-console.log(`fees $${m.fees.toFixed(4)} · borrow $${m.borrowCost.toFixed(4)}`);
+console.log(`fees ${m.fees.toFixed(4)} · borrow ${m.borrowCost.toFixed(4)} · funding net ${m.fundingNet.toFixed(4)}`);
 
 if (outPath) {
   mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : ".", { recursive: true });
