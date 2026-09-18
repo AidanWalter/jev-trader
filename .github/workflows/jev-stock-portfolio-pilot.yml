@@ -64,9 +64,14 @@ on:
         description: Hard cap across all fresh Jev calls
         required: true
         default: "12000"
+      probe_run_id:
+        description: Optional completed jev-stock-portfolio-probe run ID whose exact universe and cache should be reused
+        required: false
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   pilot:
@@ -83,17 +88,21 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Require secrets
+      - name: Require TypeSafe secret
         run: |
           if [ -z "$TYPESAFE_AI_API_KEY" ]; then
             echo "TYPESAFE_AI_API_KEY repository secret is not configured"
             exit 1
           fi
+      - name: Require Polygon secret when no probe artifact is supplied
+        if: ${{ inputs.probe_run_id == '' }}
+        run: |
           if [ -z "$POLYGON_API_KEY" ]; then
             echo "POLYGON_API_KEY repository secret is not configured"
             exit 1
           fi
       - name: Build point-in-time liquid stock universe
+        if: ${{ inputs.probe_run_id == '' }}
         run: |
           bun run scripts/download-polygon-universe.ts \
             --selection-date="${{ inputs.selection_date }}" \
@@ -105,6 +114,40 @@ jobs:
             --spread-bps="${{ inputs.spread_bps }}" \
             --out-dir=data/market/stock-universe \
             --manifest=data/market/stock-universe/universe.json
+      - name: Download optional exact stock probe artifact
+        if: ${{ inputs.probe_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-stock-portfolio-probe-${{ inputs.probe_run_id }}
+          path: probe
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.probe_run_id }}
+      - name: Reuse verified stock probe universe and cache
+        if: ${{ inputs.probe_run_id != '' }}
+        run: |
+          test -s probe/market/stock-universe/universe.json
+          test -s probe/stock-portfolio-probe-summary.json
+          test -s probe/stock-portfolio-probe-cache.jsonl
+          jq -e \
+            --arg sel "${{ inputs.selection_date }}" \
+            --arg from "${{ inputs.from }}" \
+            --arg to "${{ inputs.to }}" \
+            --argjson top "${{ inputs.top }}" \
+            --argjson mult "${{ inputs.multiplier }}" \
+            '.selectionDate == $sel and .from == $from and .to == $to and .requestedTop == $top and .multiplier == $mult' \
+            probe/market/stock-universe/universe.json >/dev/null
+          mkdir -p data/market
+          cp -R probe/market/stock-universe data/market/stock-universe
+          ACTUAL="$(bun -e 'import { fingerprintUniverse } from "./research/universe"; console.log(fingerprintUniverse("data/market/stock-universe/universe.json").combinedSha256)')"
+          PROBE="$(jq -r '.fingerprint.combinedSha256' probe/stock-portfolio-probe-summary.json)"
+          if [ "$ACTUAL" != "$PROBE" ]; then
+            echo "Stock probe universe fingerprint does not match copied universe"
+            exit 1
+          fi
+          cp probe/stock-portfolio-probe-cache.jsonl data/stock-portfolio-pilot-cache.jsonl
+          echo "Reusing exact stock universe and cache from probe run ${{ inputs.probe_run_id }}"
       - name: Run development-only Jev stock portfolio pilot
         run: |
           bun run research/portfolio-pilot.ts data/market/stock-universe/universe.json \
