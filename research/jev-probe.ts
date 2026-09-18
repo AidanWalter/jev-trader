@@ -36,9 +36,10 @@ const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
-const directionThresholdBpsFloor = Number(flag(
-  "direction-threshold-bps",
-  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+const directionThresholdBpsFloor = Number(flag("direction-threshold-bps-floor", "1"));
+const directionThresholdFixedCostBps = Number(flag(
+  "direction-threshold-fixed-cost-bps",
+  String(2 * slippageBps + 2 * feeBps),
 ));
 
 const bars = extname(file).toLowerCase() === ".jsonl"
@@ -50,7 +51,7 @@ const ranges = chronologicalRanges(bars);
 const cache = new JsonlSignalCache(cachePath);
 
 function candidateStates(horizonBars: number): FeatureState[] {
-  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor };
+  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor, directionThresholdFixedCostBps };
   const out: FeatureState[] = [];
   for (const range of [ranges.train, ranges.validation]) {
     const start = Math.max(cfg.minHistoryBars, range.start);
@@ -171,7 +172,7 @@ const summary = {
   actualProbeCostUsd: totalFreshTokens / 1e6 * usdPerMTok,
   usdPerMTok,
   execution: { spreadBps, feeBps, slippageBps },
-  features: { directionThresholdBpsFloor },
+  features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
   rows,
 };
 
