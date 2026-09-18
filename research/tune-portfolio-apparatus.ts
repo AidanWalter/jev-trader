@@ -173,6 +173,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
         fills: validation.fills.length,
         fees: validation.fees,
         borrowCost: validation.borrowCost,
+        fundingNet: validation.fundingNet,
       },
       objective: objective(validation),
     });
@@ -204,6 +205,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
       fills: best!.train.fills.length,
       fees: best!.train.fees,
       borrowCost: best!.train.borrowCost,
+      fundingNet: best!.train.fundingNet,
     },
     trainObjective: best!.score,
     validationMetrics: nominal.metrics,
