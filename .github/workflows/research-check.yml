@@ -31,5 +31,7 @@ jobs:
         run: bun run research:check-portfolio
       - name: Stock session execution regression
         run: bun run research:check-stock-session
+      - name: Perpetual funding regression
+        run: bun run research:check-perp-funding
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
