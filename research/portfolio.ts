@@ -1,4 +1,5 @@
-import { buildFeatureState, defaultFeatureConfig } from "./features";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { choosePolicyAction, defaultPolicyConfig } from "./policy";
 import type { ExecutionConfig, FeatureConfig, PolicyConfig, SignalEvaluator } from "./types";
 import type { LoadedAsset } from "./universe";
@@ -175,9 +176,14 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
       const portfolioEquity = mark(i);
       if (!(portfolioEquity > 0)) break;
 
+      const states = buildPortfolioFeatureStates(
+        assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars })),
+        i,
+        features,
+      );
       const candidates: { symbol: string; target: number; score: number }[] = [];
       for (const asset of assets) {
-        const state = buildFeatureState(asset.bars, i, features);
+        const state = states.get(asset.spec.symbol);
         if (!state) continue;
         const signal = await options.evaluator.evaluate(state);
         const q = quantities.get(asset.spec.symbol) ?? 0;
