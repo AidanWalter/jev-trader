@@ -1,0 +1,49 @@
+name: gen2-perp-oracle-dev
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gen2-perp-oracle-dev.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download exact generation-two sizing artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gen2-perp-sizing-35388367673
+          path: sizing
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388367673
+      - name: Run development-only perfect-foresight horizon scan
+        run: |
+          bun run research/oracle-portfolio-bound.ts sizing/universe/universe.json \
+            --horizons=12,24 \
+            --decision-every=4 \
+            --split=dev \
+            --allow-short=true \
+            --short-borrow-bps-day=0 \
+            --top-n=3 \
+            --max-gross=1 \
+            --max-asset=0.5 | tee oracle.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen2-perp-oracle-dev-${{ github.run_id }}
+          path: oracle.txt
+          retention-days: 30
