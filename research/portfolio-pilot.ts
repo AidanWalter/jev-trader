@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
@@ -23,6 +24,7 @@ if (!manifest) {
 }
 
 const modelName = flag("model", "jev")!;
+const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12")
   .split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,technical,path,full")
@@ -89,13 +91,18 @@ async function scoreStates(
 ): Promise<Score> {
   const labels: Direction[] = ["long", "flat", "short"];
   let n = 0, correct = 0, brier = 0, logLoss = 0, called = 0;
-  for (const row of rows) {
+  const prepared = rows.map((row) => {
     const future = assets[row.assetIndex]!.bars[row.barIndex + horizonBars]!;
     const retBps = (future.close / row.state.price - 1) * 10_000;
     const truth: Direction =
       retBps > row.state.directionThresholdBps ? "long" :
       retBps < -row.state.directionThresholdBps ? "short" : "flat";
-    const signal = await evaluator.evaluate(row.state);
+    return { row, retBps, truth };
+  });
+  const signals = await mapLimit(prepared, concurrency, (x) => evaluator.evaluate(x.row.state));
+  for (let i = 0; i < prepared.length; i++) {
+    const { retBps, truth } = prepared[i]!;
+    const signal = signals[i]!;
     n++;
     if (signal.direction.choice === truth) correct++;
     for (const label of labels) {
@@ -221,6 +228,7 @@ const summary = {
   profiles,
   decisionEveryBars,
   maxNewEvaluations,
+  concurrency,
   usedNewEvaluations,
   freshInputTokens,
   portfolio: { topN, maxGrossExposure, maxAssetExposure },
