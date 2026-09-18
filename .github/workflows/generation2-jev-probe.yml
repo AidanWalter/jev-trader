@@ -50,10 +50,10 @@ jobs:
             --model=jev \
             --concurrency=4 \
             --horizons=8,12 \
-            --profiles=technical,path \
+            --profiles=technical,path,cross,full \
             --decision-every=8 \
             --sample-per-cell=6 \
-            --max-new-evals=24 \
+            --max-new-evals=48 \
             --fee-bps=4 \
             --slippage-bps=1 \
             --cache=data/g2/portfolio-probe-cache.jsonl \
