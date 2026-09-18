@@ -41,7 +41,10 @@ const result = await replayPortfolio(assets, {
     feeBps,
     slippageBps,
     spreadBpsFallback: spreadBps,
-    allowShort: flag("allow-short", "true") !== "false",
+    allowShort: flag(
+      "allow-short",
+      assets.every((asset) => asset.spec.kind === "perp") ? "true" : "false",
+    ) !== "false",
   },
   policy: {
     minDirectionalEdge: Number(flag("min-edge", "0.12")),
