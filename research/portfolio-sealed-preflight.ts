@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { JsonlSignalCache } from "./cache";
-import { buildFeatureState, defaultFeatureConfig } from "./features";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { chronologicalRanges } from "./splits";
 import type { InputProfile } from "./profiles";
 import { alignUniverse, fingerprintUniverse, loadUniverse } from "./universe";
@@ -42,10 +43,12 @@ const cfg = {
 };
 
 let states = 0, cached = 0, missing = 0;
+const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
 const first = Math.max(cfg.minHistoryBars, ranges.test.start);
 for (let i = first; i + cfg.horizonBars < ranges.test.end; i += freeze.cadence.decisionEveryBars) {
+  const featureStates = buildPortfolioFeatureStates(series, i, cfg);
   for (const asset of assets) {
-    const state = buildFeatureState(asset.bars, i, cfg);
+    const state = featureStates.get(asset.spec.symbol);
     if (!state) continue;
     states++;
     if (cache.has(freeze.evaluator.namespace, state)) cached++;
