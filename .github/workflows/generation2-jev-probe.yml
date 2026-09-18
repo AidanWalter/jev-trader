@@ -2,10 +2,7 @@
 name: generation2-jev-probe
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/generation2-jev-probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,6 +10,7 @@ permissions:
 
 jobs:
   probe:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
