@@ -1,0 +1,125 @@
+name: jev-direction-sealed
+
+on:
+  workflow_dispatch:
+    inputs:
+      development_run_id:
+        description: Successful qualified jev-direction-development run ID
+        required: true
+      dashboard_verified:
+        description: I checked TypeSafe billing for development and it matched the artifact closely
+        required: true
+        type: boolean
+        default: false
+      confirm_spend:
+        description: I approve this one-time sealed test under a hard $0.09 ledger cap
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sealed:
+    if: ${{ inputs.dashboard_verified == true && inputs.confirm_spend == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download exact qualified development artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-development-${{ inputs.development_run_id }}
+          path: prior
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.development_run_id }}
+
+      - name: Verify frozen apparatus identity and qualification
+        run: |
+          set -euo pipefail
+          FREEZE="$(find prior -name freeze.json -print -quit)"
+          SELECTION="$(find prior -name selection.json -print -quit)"
+          PILOT="$(find prior -name pilot.json -print -quit)"
+          CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
+          test -n "$FREEZE"
+          test -n "$SELECTION"
+          test -n "$PILOT"
+          test -n "$CACHE"
+          test -n "$MANIFEST"
+          jq -e '
+            .qualification.passed == true and
+            .evaluatorKind == "jev-direction" and
+            .chosen.profile == "lean" and
+            .chosen.horizonBars == 8
+          ' "$SELECTION" >/dev/null
+          jq -e '
+            .modelName == "jev-direction" and
+            .profiles == ["lean"] and
+            .horizons == [8] and
+            .decisionEveryBars == 8 and
+            .spend.estimatedUsd <= 0.60
+          ' "$PILOT" >/dev/null
+          mkdir -p data/sealed
+          cp -R "$(dirname "$MANIFEST")" data/sealed/universe
+          cp "$FREEZE" data/sealed/freeze.json
+          cp "$SELECTION" data/sealed/selection.json
+          cp "$PILOT" data/sealed/pilot.json
+          cp "$CACHE" data/sealed/jev-direction-cache.jsonl
+
+      - name: Zero-spend sealed preflight
+        run: |
+          set -euo pipefail
+          bun run research/portfolio-sealed-preflight.ts data/sealed/freeze.json \
+            --manifest=data/sealed/universe/universe.json \
+            --cache=data/sealed/jev-direction-cache.jsonl | tee data/sealed/preflight.txt
+          MISSING="$(sed -n 's/^new Jev calls required //p' data/sealed/preflight.txt | tail -1)"
+          test -n "$MISSING"
+          if [ "$MISSING" -gt 1000 ]; then
+            echo "Sealed test needs $MISSING fresh calls, above the 1000-call hard ceiling."
+            exit 1
+          fi
+          echo "Preflight accepted $MISSING missing sealed states. No Jev call has been made."
+
+      - name: Run one-time frozen sealed test
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/run-portfolio-sealed-test.ts data/sealed/freeze.json \
+            --manifest=data/sealed/universe/universe.json \
+            --cache=data/sealed/jev-direction-cache.jsonl \
+            --concurrency=1 \
+            --max-new-evals=1000 \
+            --max-paid-requests=1000 \
+            --max-input-tokens=2000000 \
+            --reserve-tokens-per-request=2000 \
+            --max-usd=0.09 \
+            --usd-per-mtok=0.042 \
+            --out=data/sealed/result.json | tee data/sealed/output.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-direction-sealed-${{ github.run_id }}
+          path: |
+            data/sealed/freeze.json
+            data/sealed/selection.json
+            data/sealed/pilot.json
+            data/sealed/jev-direction-cache.jsonl
+            data/sealed/preflight.txt
+            data/sealed/output.txt
+            data/sealed/result.json
+          retention-days: 90
