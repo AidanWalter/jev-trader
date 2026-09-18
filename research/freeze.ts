@@ -14,6 +14,8 @@ interface SelectedPolicyFile {
   spreadBps: number;
   feeBps: number;
   slippageBps: number;
+  allowShort?: boolean;
+  shortBorrowBpsPerDay?: number;
   policy: PolicyConfig;
   trainMetrics?: unknown;
   validationMetrics?: unknown;
@@ -25,7 +27,13 @@ interface ApparatusSelectionFile {
   version: "apparatus-selection-v1";
   decisionEveryBars: number;
   evaluatorKind: string;
-  execution: { spreadBps: number; feeBps: number; slippageBps: number };
+  execution: {
+    spreadBps: number;
+    feeBps: number;
+    slippageBps: number;
+    allowShort?: boolean;
+    shortBorrowBpsPerDay?: number;
+  };
   features: { directionThresholdBpsFloor: number; directionThresholdFixedCostBps?: number };
   qualification?: { passed: boolean; reasons?: string[] };
   chosen: {
@@ -50,6 +58,8 @@ function normalizeSelection(raw: SelectedPolicyFile | ApparatusSelectionFile): S
       spreadBps: s.execution.spreadBps,
       feeBps: s.execution.feeBps,
       slippageBps: s.execution.slippageBps,
+      allowShort: s.execution.allowShort,
+      shortBorrowBpsPerDay: s.execution.shortBorrowBpsPerDay,
       policy: s.chosen.policy,
       directionThresholdBpsFloor: s.features.directionThresholdBpsFloor,
       directionThresholdFixedCostBps: s.features.directionThresholdFixedCostBps ?? 0,
@@ -137,8 +147,14 @@ const freezeRecord = {
     spreadBps: selected.spreadBps,
     feeBps: selected.feeBps,
     slippageBps: selected.slippageBps,
-    allowShort: flag("allow-short", "true") !== "false",
-    shortBorrowBpsPerDay: Number(flag("short-borrow-bps-day", "1")),
+    allowShort: flag(
+      "allow-short",
+      selected.allowShort !== undefined ? String(selected.allowShort) : (kind === "perp" ? "true" : "false"),
+    ) !== "false",
+    shortBorrowBpsPerDay: Number(flag(
+      "short-borrow-bps-day",
+      String(selected.shortBorrowBpsPerDay ?? (kind === "perp" ? 0 : 1)),
+    )),
     maxGrossExposure: Number(flag("max-gross", "1")),
     minTradeNotional: Number(flag("min-trade", "1")),
   },
