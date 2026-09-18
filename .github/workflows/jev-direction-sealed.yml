@@ -38,7 +38,7 @@ jobs:
       - name: Download exact qualified development artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-development-${{ inputs.development_run_id }}
+          pattern: jev-direction-development-sample-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -92,6 +92,17 @@ jobs:
           fi
           echo "Preflight accepted $MISSING missing sealed states. No Jev call has been made."
 
+      - name: Refuse duplicate sealed spend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="jev-direction-sealed-development-${{ inputs.development_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate sealed spend"
+            exit 1
+          fi
+
       - name: Run one-time frozen sealed test
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -113,7 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: jev-direction-sealed-${{ github.run_id }}
+          name: jev-direction-sealed-development-${{ inputs.development_run_id }}
           path: |
             data/sealed/freeze.json
             data/sealed/selection.json
