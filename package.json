@@ -61,6 +61,7 @@
     "research:hyperliquid-portfolio-paper": "bun run research/live-frozen-hyperliquid-portfolio-paper.ts",
     "research:safe-jev-probe": "bun run research/safe-jev-direction-probe.ts",
     "research:check-safe-jev": "bun run research/check-safe-jev.ts",
-    "research:check-spend-budget": "bun run research/check-spend-budget.ts"
+    "research:check-spend-budget": "bun run research/check-spend-budget.ts",
+    "research:check-paid-workflows": "bun run research/check-paid-workflows.ts"
   }
 }
