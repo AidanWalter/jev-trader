@@ -1,0 +1,84 @@
+name: jev-pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: Public Binance spot symbol
+        required: true
+        default: BTCUSDT
+      interval:
+        description: Binance kline interval
+        required: true
+        default: 15m
+      start:
+        description: Historical start date
+        required: true
+        default: "2025-01-01"
+      end:
+        description: Historical end date
+        required: true
+        default: "2025-02-01"
+      horizons:
+        description: Forecast horizons in bars
+        required: true
+        default: "6,12"
+      profiles:
+        description: Jev input profiles
+        required: true
+        default: "minimal,technical,path,full"
+      decision_every:
+        description: Evaluate every N bars
+        required: true
+        default: "4"
+      max_new_evals:
+        description: Hard cap across the entire pilot
+        required: true
+        default: "10000"
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: |
+          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
+            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
+            exit 1
+          fi
+      - name: Download fixed public market history
+        run: bun run scripts/download-binance-klines.ts --symbol="${{ inputs.symbol }}" --interval="${{ inputs.interval }}" --start="${{ inputs.start }}" --end="${{ inputs.end }}" --out=data/market/pilot.csv
+      - name: Run Jev development pilot
+        run: |
+          bun run research/pilot.ts data/market/pilot.csv \
+            --symbol="${{ inputs.symbol }}" \
+            --kind=spot \
+            --model=jev \
+            --horizons="${{ inputs.horizons }}" \
+            --profiles="${{ inputs.profiles }}" \
+            --decision-every="${{ inputs.decision_every }}" \
+            --max-new-evals="${{ inputs.max_new_evals }}" \
+            --cache=data/jev-pilot-cache.jsonl \
+            --out=data/jev-pilot-summary.json
+      - name: Verify sealed-test marker
+        run: grep -q '"sealedTestBars"' data/jev-pilot-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jev-pilot-${{ inputs.symbol }}-${{ github.run_id }}
+          path: |
+            data/jev-pilot-summary.json
+            data/jev-pilot-cache.jsonl
+          retention-days: 30
