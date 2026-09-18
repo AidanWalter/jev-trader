@@ -27,5 +27,7 @@ jobs:
         run: bun x tsc --noEmit
       - name: Replay smoke test
         run: bun run research:check
+      - name: Portfolio replay smoke test
+        run: bun run research:check-portfolio
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
