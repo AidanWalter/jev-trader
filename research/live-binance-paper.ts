@@ -186,7 +186,6 @@ function executeTarget(state: PaperState, openBar: MarketBar, targetExposure: nu
     targetExposure,
     equityAfter: equity(state, openBar.open),
   };
-  targetExposure = null;
   event(fill);
   return fill;
 }
