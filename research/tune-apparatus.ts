@@ -80,6 +80,19 @@ function objective(m: ReplayMetrics) {
 
 const costStressMultipliers = [1, 1.5, 2] as const;
 
+function validationSegments() {
+  const start = ranges.validation.start;
+  const end = ranges.validation.end;
+  const rawMid = Math.floor((start + end) / 2);
+  const alignedMid =
+    start + Math.max(1, Math.floor((rawMid - start) / pilot.decisionEveryBars)) * pilot.decisionEveryBars;
+  const mid = Math.min(end - pilot.decisionEveryBars, alignedMid);
+  return [
+    { name: "early", start, end: mid },
+    { name: "late", start: mid, end },
+  ];
+}
+
 async function validateUnderCosts(
   evaluator: CachedEvaluator,
   cell: PilotRow,
@@ -160,10 +173,40 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
   const nominal = validationStress.find((x) => x.multiplier === 1)!;
   const stress15 = validationStress.find((x) => x.multiplier === 1.5)!;
   const stress2 = validationStress.find((x) => x.multiplier === 2)!;
-  const robustValidationObjective =
+
+  const validationSegmentsResult = [];
+  for (const segment of validationSegments()) {
+    const r = await replayBars(bars, {
+      evaluator,
+      policy: bestTrain!.policy,
+      features: {
+        horizonBars: cell.horizonBars,
+        directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+        directionThresholdFixedCostBps: pilot.features.directionThresholdFixedCostBps ?? 0,
+      },
+      startIndex: segment.start,
+      endIndex: segment.end - cell.horizonBars - 1,
+      decisionEveryBars: pilot.decisionEveryBars,
+      execution: {
+        feeBps: pilot.execution.feeBps,
+        slippageBps: pilot.execution.slippageBps,
+        spreadBpsFallback: pilot.execution.spreadBps,
+      },
+    });
+    validationSegmentsResult.push({
+      name: segment.name,
+      metrics: r.metrics,
+      objective: objective(r.metrics),
+    });
+  }
+  const weakestSegmentObjective = Math.min(...validationSegmentsResult.map((x) => x.objective));
+  const costRobustObjective =
     nominal.objective * 0.5 +
     stress15.objective * 0.3 +
     stress2.objective * 0.2;
+  const robustValidationObjective =
+    costRobustObjective * 0.8 +
+    weakestSegmentObjective * 0.2;
 
   candidates.push({
     horizonBars: cell.horizonBars,
@@ -175,6 +218,9 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     validationMetrics: nominal.metrics,
     validationObjective: nominal.objective,
     validationStress,
+    validationSegments: validationSegmentsResult,
+    weakestSegmentObjective,
+    costRobustObjective,
     robustValidationObjective,
   });
   console.log(
@@ -183,6 +229,7 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     " · validation " + nominal.metrics.returnPct.toFixed(2) + "%" +
     " · 1.5x cost " + stress15.metrics.returnPct.toFixed(2) + "%" +
     " · 2x cost " + stress2.metrics.returnPct.toFixed(2) + "%" +
+    " · halves " + validationSegmentsResult.map((x) => x.metrics.returnPct.toFixed(2) + "%").join("/") +
     " · DD " + nominal.metrics.maxDrawdownPct.toFixed(2) + "%" +
     " · orders " + nominal.metrics.orders
   );
