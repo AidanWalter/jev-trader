@@ -141,6 +141,8 @@ export interface ReplayMetrics {
   turnover: number;
   fees: number;
   borrowCost: number;
+  /** Signed funding P&L: positive means net funding received, negative means net funding paid. */
+  fundingNet: number;
   orders: number;
   roundTrips: number;
   wins: number;
