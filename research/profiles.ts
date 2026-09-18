@@ -1,6 +1,6 @@
 import type { FeatureState } from "./types";
 
-export type InputProfile = "minimal" | "technical" | "path" | "cross" | "full";
+export type InputProfile = "minimal" | "lean" | "technical" | "path" | "cross" | "full";
 
 export function projectState(state: FeatureState, profile: InputProfile) {
   const base = {
@@ -20,6 +20,30 @@ export function projectState(state: FeatureState, profile: InputProfile) {
   };
   if (profile === "minimal") {
     return { ...base, returnsBps: state.returnsBps };
+  }
+  if (profile === "lean") {
+    return {
+      symbol: state.symbol,
+      kind: state.kind,
+      intervalMs: state.intervalMs,
+      horizonBars: state.horizonBars,
+      directionThresholdBps: state.directionThresholdBps,
+      returnsBps: state.returnsBps,
+      realizedVolBps: state.realizedVolBps,
+      rangeBps: state.rangeBps,
+      volumeRatio20: state.volumeRatio20,
+      trendBps20: state.trendBps20,
+      ...(state.kind === "perp" ? funding : {}),
+      ...(state.marketContext ? {
+        marketContext: {
+          breadthR12PositivePct: state.marketContext.breadthR12PositivePct,
+          meanR12Bps: state.marketContext.meanR12Bps,
+          dispersionR12Bps: state.marketContext.dispersionR12Bps,
+          relativeR12Bps: state.marketContext.relativeR12Bps,
+          rankR12Pct: state.marketContext.rankR12Pct,
+        },
+      } : {}),
+    };
   }
   if (profile === "technical") {
     return {
