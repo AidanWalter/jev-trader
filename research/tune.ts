@@ -1,4 +1,5 @@
 import { extname } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
@@ -33,6 +34,7 @@ const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const horizonBars = Number(flag("horizon", "12"));
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
+const outPolicy = flag("out-policy");
 
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
@@ -98,4 +100,22 @@ console.log("selected policy from train, ranked on validation:");
 console.log(JSON.stringify(chosen.policy, null, 2));
 console.log(`train return ${chosen.train.returnPct.toFixed(2)}% · DD ${chosen.train.maxDrawdownPct.toFixed(2)}% · Sharpe ${chosen.train.sharpe?.toFixed(2) ?? "n/a"}`);
 console.log(`validation return ${chosen.validation.returnPct.toFixed(2)}% · DD ${chosen.validation.maxDrawdownPct.toFixed(2)}% · Sharpe ${chosen.validation.sharpe?.toFixed(2) ?? "n/a"}`);
+if (outPolicy) {
+  const dir = outPolicy.includes("/") ? outPolicy.slice(0, outPolicy.lastIndexOf("/")) : ".";
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(outPolicy, JSON.stringify({
+    selectedAt: Date.now(),
+    model: rawEvaluator.name,
+    profile,
+    horizonBars,
+    decisionEveryBars,
+    spreadBps,
+    feeBps,
+    slippageBps,
+    policy: chosen.policy,
+    trainMetrics: chosen.train,
+    validationMetrics: chosen.validation,
+  }, null, 2) + "\n");
+  console.log("wrote selected policy " + outPolicy);
+}
 console.log("sealed test was not evaluated");
