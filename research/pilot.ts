@@ -35,9 +35,10 @@ const outPath = flag("out", "data/jev-pilot-summary.json")!;
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
-const directionThresholdBpsFloor = Number(flag(
-  "direction-threshold-bps",
-  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+const directionThresholdBpsFloor = Number(flag("direction-threshold-bps-floor", "1"));
+const directionThresholdFixedCostBps = Number(flag(
+  "direction-threshold-fixed-cost-bps",
+  String(2 * slippageBps + 2 * feeBps),
 ));
 
 const bars = extname(file).toLowerCase() === ".jsonl"
@@ -63,7 +64,7 @@ async function score(
   horizonBars: number,
   evaluator: CachedEvaluator,
 ): Promise<Score> {
-  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor };
+  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor, directionThresholdFixedCostBps };
   const labels: Direction[] = ["long", "flat", "short"];
   const bins = Array.from({ length: 10 }, () => ({ n: 0, conf: 0, correct: 0 }));
   let n = 0;
@@ -117,7 +118,7 @@ const rows: any[] = [];
 let usedNewEvaluations = 0;
 
 function countMissing(namespace: string, rangeStart: number, rangeEnd: number, horizonBars: number) {
-  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor };
+  const cfg = { ...defaultFeatureConfig, horizonBars, directionThresholdBpsFloor, directionThresholdFixedCostBps };
   const start = Math.max(cfg.minHistoryBars, rangeStart);
   let missing = 0;
   for (let i = start; i + horizonBars < rangeEnd; i += decisionEveryBars) {
@@ -154,7 +155,7 @@ for (const horizonBars of horizons) {
 
     const validationReplay = await replayBars(bars, {
       evaluator,
-      features: { horizonBars, directionThresholdBpsFloor },
+      features: { horizonBars, directionThresholdBpsFloor, directionThresholdFixedCostBps },
       startIndex: ranges.validation.start,
       endIndex: ranges.validation.end - horizonBars - 1,
       decisionEveryBars,
@@ -212,7 +213,7 @@ const summary = {
   sealedTestBars: split.test.length,
   decisionEveryBars,
   execution: { spreadBps, feeBps, slippageBps },
-  features: { directionThresholdBpsFloor },
+  features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
   modelName,
   horizons,
   profiles,
