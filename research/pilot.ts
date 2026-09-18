@@ -37,6 +37,8 @@ const outPath = flag("out", "data/jev-pilot-summary.json")!;
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
+const allowShort = flag("allow-short", kind === "perp" ? "true" : "false") !== "false";
+const shortBorrowBpsPerDay = Number(flag("short-borrow-bps-day", kind === "perp" ? "0" : "1"));
 const directionThresholdBpsFloor = Number(flag("direction-threshold-bps-floor", "1"));
 const directionThresholdFixedCostBps = Number(flag(
   "direction-threshold-fixed-cost-bps",
@@ -167,7 +169,13 @@ for (const horizonBars of horizons) {
       startIndex: ranges.validation.start,
       endIndex: ranges.validation.end - horizonBars - 1,
       decisionEveryBars,
-      execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
+      execution: {
+        feeBps,
+        slippageBps,
+        spreadBpsFallback: spreadBps,
+        allowShort,
+        shortBorrowBpsPerDay,
+      },
     });
 
     const row = {
@@ -220,7 +228,7 @@ const summary = {
   validationBars: split.validation.length,
   sealedTestBars: split.test.length,
   decisionEveryBars,
-  execution: { spreadBps, feeBps, slippageBps },
+  execution: { spreadBps, feeBps, slippageBps, allowShort, shortBorrowBpsPerDay },
   features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
   modelName,
   horizons,
