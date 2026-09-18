@@ -1,0 +1,83 @@
+name: jev-sealed-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      pilot_run_id:
+        description: Workflow run ID from a completed jev-pilot run
+        required: true
+      max_new_evals:
+        description: Hard cap on fresh Jev calls for the sealed test
+        required: true
+        default: "500"
+      confirm:
+        description: I intend to evaluate the sealed test exactly once for this frozen apparatus
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sealed-test:
+    if: ${{ inputs.confirm == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: |
+          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
+            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
+            exit 1
+          fi
+      - name: Download exact frozen pilot artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-pilot-*-${{ inputs.pilot_run_id }}
+          path: data
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.pilot_run_id }}
+      - name: Verify required frozen files
+        run: |
+          test -s data/market/pilot.csv
+          test -s data/jev-pilot-cache.jsonl
+          test -s data/apparatus-freeze.json
+      - name: Zero-spend sealed preflight
+        run: |
+          bun run research/sealed-preflight.ts data/apparatus-freeze.json \
+            --data=data/market/pilot.csv \
+            --cache=data/jev-pilot-cache.jsonl | tee data/sealed-preflight.txt
+      - name: Run frozen sealed test
+        run: |
+          set -o pipefail
+          bun run research/run-sealed-test.ts data/apparatus-freeze.json \
+            --data=data/market/pilot.csv \
+            --cache=data/jev-pilot-cache.jsonl \
+            --max-new-evals="${{ inputs.max_new_evals }}" \
+            --out=data/sealed-result.json | tee data/sealed-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-sealed-result-${{ inputs.pilot_run_id }}-${{ github.run_id }}
+          path: |
+            data/apparatus-freeze.json
+            data/apparatus-selection.json
+            data/jev-pilot-summary.json
+            data/jev-pilot-cache.jsonl
+            data/sealed-preflight.txt
+            data/sealed-output.txt
+            data/sealed-result.json
+          retention-days: 90
