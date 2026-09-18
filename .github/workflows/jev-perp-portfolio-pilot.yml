@@ -70,6 +70,7 @@ permissions:
 
 jobs:
   pilot:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
