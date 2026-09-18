@@ -1,0 +1,109 @@
+name: jev-portfolio-pilot-autostart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/jev-portfolio-pilot-autostart.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: |
+          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
+            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
+            exit 1
+          fi
+      - name: Download exact successful probe artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-probe-35383549333
+          path: probe
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35383549333
+      - name: Verify and reuse exact probe universe and cache
+        run: |
+          test -s probe/market/universe/universe.json
+          test -s probe/portfolio-probe-summary.json
+          test -s probe/portfolio-probe-cache.jsonl
+          jq -e '
+            .horizons == [6,12] and
+            .profiles == ["technical","path","cross","full"] and
+            .decisionEveryBars == 8
+          ' probe/portfolio-probe-summary.json >/dev/null
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "15m" and
+            .start == "2025-01-01" and
+            .end == "2025-02-01"
+          ' probe/market/universe/universe.json >/dev/null
+          mkdir -p data/market
+          cp -R probe/market/universe data/market/universe
+          ACTUAL="$(bun -e 'import { fingerprintUniverse } from "./research/universe"; console.log(fingerprintUniverse("data/market/universe/universe.json").combinedSha256)')"
+          PROBE="$(jq -r '.fingerprint.combinedSha256' probe/portfolio-probe-summary.json)"
+          test "$ACTUAL" = "$PROBE"
+          cp probe/portfolio-probe-cache.jsonl data/portfolio-pilot-cache.jsonl
+      - name: Run complete development-only Jev portfolio pilot
+        run: |
+          bun run research/portfolio-pilot.ts data/market/universe/universe.json \
+            --model=jev \
+            --require-complete-grid=true \
+            --concurrency=4 \
+            --horizons=6,12 \
+            --profiles=technical,path,cross,full \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --max-new-evals=8000 \
+            --cache=data/portfolio-pilot-cache.jsonl \
+            --out=data/portfolio-pilot-summary.json
+      - name: Tune shared-bankroll apparatus from cached Jev probabilities
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/market/universe/universe.json \
+            --pilot=data/portfolio-pilot-summary.json \
+            --cache=data/portfolio-pilot-cache.jsonl \
+            --grid=full \
+            --out=data/portfolio-apparatus-selection.json
+      - name: Freeze only if validation qualification passes
+        run: |
+          bun run research/freeze-portfolio.ts data/market/universe/universe.json \
+            --selection=data/portfolio-apparatus-selection.json \
+            --out=data/portfolio-apparatus-freeze.json
+      - name: Zero-spend sealed-test preflight
+        if: ${{ success() }}
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/portfolio-apparatus-freeze.json \
+            --manifest=data/market/universe/universe.json \
+            --cache=data/portfolio-pilot-cache.jsonl | tee data/portfolio-sealed-preflight.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-portfolio-pilot-autostart-${{ github.run_id }}
+          path: |
+            data/market/universe/
+            data/portfolio-pilot-cache.jsonl
+            data/portfolio-pilot-summary.json
+            data/portfolio-apparatus-selection.json
+            data/portfolio-apparatus-freeze.json
+            data/portfolio-sealed-preflight.txt
+          retention-days: 30
