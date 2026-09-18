@@ -40,6 +40,9 @@
     "research:tune-apparatus": "bun run research/tune-apparatus.ts",
     "research:sealed-preflight": "bun run research/sealed-preflight.ts",
     "research:paper-frozen": "bun run research/live-frozen-binance-paper.ts",
-    "research:jev-probe": "bun run research/jev-probe.ts"
+    "research:jev-probe": "bun run research/jev-probe.ts",
+    "data:polygon": "bun run scripts/download-polygon-aggs.ts",
+    "data:polygon-universe": "bun run scripts/download-polygon-universe.ts",
+    "data:yahoo": "bun run scripts/download-yahoo-chart.ts"
   }
 }
