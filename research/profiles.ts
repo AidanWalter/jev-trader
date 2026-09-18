@@ -27,6 +27,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       rangeBps: state.rangeBps,
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
+      ...(state.funding ? { funding: state.funding } : {}),
     };
   }
   if (profile === "path") {
@@ -38,6 +39,7 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       volumeRatio20: state.volumeRatio20,
       trendBps20: state.trendBps20,
       recentReturnsBps: state.recentReturnsBps,
+      ...(state.funding ? { funding: state.funding } : {}),
     };
   }
   if (profile === "cross") {
