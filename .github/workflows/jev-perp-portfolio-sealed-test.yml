@@ -1,0 +1,84 @@
+name: jev-perp-portfolio-sealed-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      pilot_run_id:
+        description: Workflow run ID from a completed jev-perp-portfolio-pilot run
+        required: true
+      max_new_evals:
+        description: Hard cap on fresh Jev calls for the sealed perpetual portfolio test
+        required: true
+        default: "1000"
+      confirm:
+        description: I intend to evaluate this frozen perpetual apparatus on its sealed test exactly once
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sealed-test:
+    if: ${{ inputs.confirm == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: |
+          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
+            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
+            exit 1
+          fi
+      - name: Download exact frozen perp pilot artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-perp-portfolio-pilot-${{ inputs.pilot_run_id }}
+          path: data
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.pilot_run_id }}
+      - name: Verify required frozen perp files
+        run: |
+          test -s data/market/perp-universe/universe.json
+          test -s data/perp-portfolio-pilot-cache.jsonl
+          test -s data/perp-portfolio-apparatus-freeze.json
+      - name: Zero-spend perp portfolio preflight
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/perp-portfolio-apparatus-freeze.json \
+            --manifest=data/market/perp-universe/universe.json \
+            --cache=data/perp-portfolio-pilot-cache.jsonl | tee data/perp-portfolio-sealed-preflight-rerun.txt
+      - name: Run frozen perpetual portfolio sealed test
+        run: |
+          set -o pipefail
+          bun run research/run-portfolio-sealed-test.ts data/perp-portfolio-apparatus-freeze.json \
+            --manifest=data/market/perp-universe/universe.json \
+            --cache=data/perp-portfolio-pilot-cache.jsonl \
+            --max-new-evals="${{ inputs.max_new_evals }}" \
+            --out=data/perp-portfolio-sealed-result.json | tee data/perp-portfolio-sealed-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-perp-portfolio-sealed-result-${{ inputs.pilot_run_id }}-${{ github.run_id }}
+          path: |
+            data/perp-portfolio-apparatus-freeze.json
+            data/perp-portfolio-apparatus-selection.json
+            data/perp-portfolio-pilot-summary.json
+            data/perp-portfolio-pilot-cache.jsonl
+            data/perp-portfolio-sealed-preflight.txt
+            data/perp-portfolio-sealed-preflight-rerun.txt
+            data/perp-portfolio-sealed-output.txt
+            data/perp-portfolio-sealed-result.json
+          retention-days: 90
