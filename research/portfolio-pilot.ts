@@ -31,6 +31,7 @@ const profiles = (flag("profiles", "minimal,technical,path,cross,full") ?? "mini
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "4")));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "20000" : "1000000000")));
+const requireCompleteGrid = flag("require-complete-grid", "false") === "true";
 const cachePath = flag("cache", "data/portfolio-pilot-cache.jsonl")!;
 const outPath = flag("out", "data/portfolio-pilot-summary.json")!;
 const feeBps = Number(flag("fee-bps", "4"));
@@ -228,6 +229,7 @@ const summary = {
   profiles,
   decisionEveryBars,
   maxNewEvaluations,
+  requireCompleteGrid,
   concurrency,
   usedNewEvaluations,
   freshInputTokens,
@@ -246,3 +248,13 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(summary, null, 2) + "\n");
 console.log("wrote " + outPath);
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
+if (requireCompleteGrid) {
+  const incomplete = cells.filter((x) => x.status !== "complete");
+  if (incomplete.length) {
+    throw new Error(
+      "requested portfolio pilot grid is incomplete; " +
+      incomplete.map((x) => x.profile + " h=" + x.horizonBars + " (" + x.status + ")").join(", ") +
+      ". Completed calls remain cached; increase --max-new-evals deliberately and rerun."
+    );
+  }
+}
