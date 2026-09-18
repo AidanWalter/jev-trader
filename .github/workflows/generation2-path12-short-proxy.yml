@@ -1,0 +1,58 @@
+name: generation2-path12-short-proxy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-path12-short-proxy.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download completed generation-two spot cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Build short-enabled path h12 proxy pilot
+        run: |
+          jq '
+            .cells = [.cells[] | select(.profile == "path" and .horizonBars == 12)]
+            | .execution.allowShort = true
+          ' data/g2/portfolio-pilot-summary.json > data/g2/path12-short-proxy-pilot.json
+          jq -e '.cells | length == 1' data/g2/path12-short-proxy-pilot.json >/dev/null
+      - name: Cache-only short-enabled retune
+        run: |
+          set -o pipefail
+          bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
+            --pilot=data/g2/path12-short-proxy-pilot.json \
+            --cache=data/g2/portfolio-pilot-cache.jsonl \
+            --grid=fast \
+            --short-borrow-bps-day=0 \
+            --out=data/g2/path12-short-proxy-selection.json | tee data/g2/path12-short-proxy.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-path12-short-proxy-${{ github.run_id }}
+          path: |
+            data/g2/path12-short-proxy-pilot.json
+            data/g2/path12-short-proxy-selection.json
+            data/g2/path12-short-proxy.txt
+          retention-days: 30
