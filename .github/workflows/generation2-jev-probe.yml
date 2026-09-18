@@ -1,0 +1,69 @@
+name: generation2-jev-probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-jev-probe.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Require TypeSafe secret
+        run: test -n "$TYPESAFE_AI_API_KEY"
+      - name: Download exact generation-two free-scan artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Verify long universe
+        run: |
+          test -s data/g2/universe/universe.json
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h" and
+            .start == "2024-01-01" and
+            .end == "2026-09-01"
+          ' data/g2/universe/universe.json >/dev/null
+      - name: Run generation-two Jev probe
+        run: |
+          bun run research/portfolio-probe.ts data/g2/universe/universe.json \
+            --model=jev \
+            --concurrency=4 \
+            --horizons=8,12 \
+            --profiles=technical,path \
+            --decision-every=8 \
+            --sample-per-cell=6 \
+            --max-new-evals=24 \
+            --fee-bps=4 \
+            --slippage-bps=1 \
+            --cache=data/g2/portfolio-probe-cache.jsonl \
+            --out=data/g2/portfolio-probe-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-jev-probe-${{ github.run_id }}
+          path: |
+            data/g2/universe/
+            data/g2/portfolio-probe-cache.jsonl
+            data/g2/portfolio-probe-summary.json
+          retention-days: 30
