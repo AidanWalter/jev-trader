@@ -125,6 +125,7 @@ jobs:
             --pilot=data/dev/pilot.json \
             --cache=data/dev/jev-direction-cache.jsonl \
             --grid=full \
+            --direction-only=true \
             --out=data/dev/selection.json | tee data/dev/tune-output.txt
 
       - name: Freeze only a qualified apparatus
@@ -133,6 +134,15 @@ jobs:
           bun run research/freeze-portfolio.ts data/dev/universe/universe.json \
             --selection=data/dev/selection.json \
             --out=data/dev/freeze.json
+
+      - name: Independent four-segment validation audit
+        run: |
+          bun run research/audit-portfolio-validation.ts data/dev/freeze.json \
+            --manifest=data/dev/universe/universe.json \
+            --cache=data/dev/jev-direction-cache.jsonl \
+            --segments=4 \
+            --min-positive-segments=4 \
+            --out=data/dev/validation-audit.json
 
       - name: Zero-spend sealed preflight only
         run: |
@@ -154,5 +164,6 @@ jobs:
             data/dev/selection.json
             data/dev/tune-output.txt
             data/dev/freeze.json
+            data/dev/validation-audit.json
             data/dev/sealed-preflight.txt
           retention-days: 60
