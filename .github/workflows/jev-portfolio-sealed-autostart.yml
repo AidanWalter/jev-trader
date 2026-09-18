@@ -1,10 +1,7 @@
 name: jev-portfolio-sealed-autostart
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/jev-portfolio-sealed-autostart.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +9,7 @@ permissions:
 
 jobs:
   sealed:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
