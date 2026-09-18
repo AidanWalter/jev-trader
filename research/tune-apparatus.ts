@@ -114,7 +114,8 @@ async function validateUnderCosts(
       execution: {
         feeBps: pilot.execution.feeBps * multiplier,
         slippageBps: pilot.execution.slippageBps * multiplier,
-        spreadBpsFallback: pilot.execution.spreadBps * multiplier,
+        spreadBpsFallback: pilot.execution.spreadBps,
+        spreadCostMultiplier: multiplier,
       },
     });
     out.push({ multiplier, metrics: r.metrics, objective: objective(r.metrics) });
