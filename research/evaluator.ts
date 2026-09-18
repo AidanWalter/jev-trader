@@ -76,7 +76,7 @@ export class JevReplayEvaluator implements SignalEvaluator {
     const t0 = performance.now();
     const modelState = projectState(state, this.profile);
 
-    let r: Awaited<ReturnType<typeof experimental_evaluate>>;
+    let r: Awaited<ReturnType<typeof experimental_evaluate>> | null = null;
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -97,8 +97,11 @@ export class JevReplayEvaluator implements SignalEvaluator {
         await Bun.sleep(50 * (attempt + 1));
       }
     }
-    if (lastError) throw lastError;
-    const d = r!.answers.direction;
+    if (!r) {
+      if (lastError) throw lastError;
+      throw new Error("Jev evaluation returned no result");
+    }
+    const d = r.answers.direction;
     const m = r.answers.magnitude;
     const a = r.answers.adverse;
     if (d?.type !== "choice") throw new Error("direction answer missing or invalid");
