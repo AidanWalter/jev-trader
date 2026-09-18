@@ -49,6 +49,8 @@ export interface PortfolioResult {
   turnover: number;
   fees: number;
   borrowCost: number;
+  /** Signed funding P&L: positive means net funding received, negative means net funding paid. */
+  fundingNet: number;
   fills: PortfolioFill[];
   equity: PortfolioPoint[];
 }
@@ -121,6 +123,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
   let cash = execution.initialCash;
   let fees = 0;
   let borrowCost = 0;
+  let fundingNet = 0;
   const quantities = new Map(assets.map((a) => [a.spec.symbol, 0]));
   const fills: PortfolioFill[] = [];
   const equity: PortfolioPoint[] = [];
@@ -161,7 +164,11 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         cash -= cost;
         borrowCost += cost;
       }
-      if (bar.kind === "perp" && bar.fundingBps) cash -= q * bar.open * bar.fundingBps / 10_000;
+      if (bar.kind === "perp" && bar.fundingBps) {
+        const funding = -q * bar.open * bar.fundingBps / 10_000;
+        cash += funding;
+        fundingNet += funding;
+      }
     }
 
     if ((i - start) % every === 0) {
@@ -256,6 +263,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
     turnover,
     fees,
     borrowCost,
+    fundingNet,
     fills,
     equity,
   };
