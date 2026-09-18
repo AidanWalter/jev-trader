@@ -26,7 +26,7 @@ on:
       profiles:
         description: Jev input profiles
         required: true
-        default: "technical,path,full"
+        default: "technical,path,cross,full"
       decision_every:
         description: Evaluate every N synchronized bars
         required: true
@@ -54,7 +54,7 @@ on:
       max_new_evals:
         description: Hard cap across all fresh Jev calls
         required: true
-        default: "7000"
+        default: "8000"
       probe_run_id:
         description: Optional completed jev-perp-portfolio-probe run ID whose exact universe and cache should be reused
         required: false
