@@ -54,6 +54,15 @@ jobs:
             --cache=data/mock-pilot-cache.jsonl \
             --max-new-evals=100000 \
             --out=data/mock-sealed-result.json | tee data/mock-sealed-output.txt
+      - name: Initialize frozen forward-paper state
+        run: |
+          bun run research/live-frozen-binance-paper.ts data/mock-apparatus-freeze.json \
+            --cache=data/mock-pilot-cache.jsonl \
+            --cycles=1 \
+            --state=data/mock-frozen-paper-state.json \
+            --events=data/mock-frozen-paper-events.jsonl
+          test -s data/mock-frozen-paper-state.json
+          grep -q '"version": "frozen-binance-paper-v1"' data/mock-frozen-paper-state.json
       - name: Momentum baseline
         run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
@@ -76,6 +85,8 @@ jobs:
             data/mock-sealed-preflight.txt
             data/mock-sealed-output.txt
             data/mock-sealed-result.json
+            data/mock-frozen-paper-state.json
+            data/mock-frozen-paper-events.jsonl
           retention-days: 14
 
   crypto-portfolio:
