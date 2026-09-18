@@ -1,0 +1,75 @@
+name: safe-jev-direction-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_budget:
+        description: Type SPEND_MAX_12_REQUESTS to allow this paid probe
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    if: ${{ inputs.confirm_budget == 'SPEND_MAX_12_REQUESTS' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download fixed generation-two market data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Verify dataset and print zero-call spend plan
+        run: |
+          test -s data/g2/universe/universe.json
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h" and
+            .start == "2024-01-01" and
+            .end == "2026-09-01"
+          ' data/g2/universe/universe.json >/dev/null
+          bun run research/jev-spend-plan.ts data/g2/universe/universe.json \
+            --horizon=8 \
+            --decision-every=8 \
+            --tokens-per-request=1500 | tee data/g2/spend-plan.txt
+      - name: Paid Jev direction probe, hard capped at 12 requests
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/safe-jev-direction-probe.ts data/g2/universe/universe.json \
+            --horizon=8 \
+            --profile=lean \
+            --decision-every=8 \
+            --sample=12 \
+            --max-requests=12 \
+            --max-input-tokens=30000 \
+            --reserve-input-tokens=2000 \
+            --concurrency=1 \
+            --cache=data/g2/safe-direction-cache.jsonl \
+            --out=data/g2/safe-direction-probe.json | tee data/g2/safe-direction-probe.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: safe-jev-direction-probe-${{ github.run_id }}
+          path: |
+            data/g2/spend-plan.txt
+            data/g2/safe-direction-cache.jsonl
+            data/g2/safe-direction-probe.json
+            data/g2/safe-direction-probe.txt
+          retention-days: 30
