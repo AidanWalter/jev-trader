@@ -1,138 +1,15 @@
-name: jev-pilot
+name: jev-pilot-disabled
 
 on:
   workflow_dispatch:
-    inputs:
-      symbol:
-        description: Public Binance spot symbol
-        required: true
-        default: BTCUSDT
-      interval:
-        description: Binance kline interval
-        required: true
-        default: 15m
-      start:
-        description: Historical start date
-        required: true
-        default: "2025-01-01"
-      end:
-        description: Historical end date
-        required: true
-        default: "2025-02-01"
-      horizons:
-        description: Forecast horizons in bars
-        required: true
-        default: "6,12"
-      profiles:
-        description: Jev input profiles
-        required: true
-        default: "minimal,technical,path,full"
-      decision_every:
-        description: Evaluate every N bars
-        required: true
-        default: "4"
-      concurrency:
-        description: Maximum concurrent Jev API calls
-        required: true
-        default: "4"
-      max_new_evals:
-        description: Hard cap across the entire pilot
-        required: true
-        default: "10000"
-      probe_run_id:
-        description: Optional completed jev-probe workflow run ID whose cache should be reused
-        required: false
-        default: ""
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  pilot:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: |
-          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
-            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
-            exit 1
-          fi
-      - name: Download fixed public market history
-        run: bun run scripts/download-binance-klines.ts --symbol="${{ inputs.symbol }}" --interval="${{ inputs.interval }}" --start="${{ inputs.start }}" --end="${{ inputs.end }}" --out=data/market/pilot.csv
-      - name: Download optional Jev probe artifact
-        if: ${{ inputs.probe_run_id != '' }}
-        uses: actions/download-artifact@v4
-        with:
-          pattern: jev-probe-*-${{ inputs.probe_run_id }}
-          path: probe
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.probe_run_id }}
-      - name: Reuse verified probe cache
-        if: ${{ inputs.probe_run_id != '' }}
-        run: |
-          test -s probe/jev-probe-summary.json
-          test -s probe/jev-probe-cache.jsonl
-          ACTUAL="$(sha256sum data/market/pilot.csv | awk '{print $1}')"
-          PROBE="$(jq -r '.dataset.sha256' probe/jev-probe-summary.json)"
-          if [ "$ACTUAL" != "$PROBE" ]; then
-            echo "Probe market-data hash does not match pilot market data"
-            exit 1
-          fi
-          cp probe/jev-probe-cache.jsonl data/jev-pilot-cache.jsonl
-          echo "Reusing probe cache from run ${{ inputs.probe_run_id }}"
-      - name: Run Jev development pilot
-        run: |
-          bun run research/pilot.ts data/market/pilot.csv \
-            --symbol="${{ inputs.symbol }}" \
-            --kind=spot \
-            --allow-short=false \
-            --model=jev \
-            --require-complete-grid=true \
-            --concurrency="${{ inputs.concurrency }}" \
-            --horizons="${{ inputs.horizons }}" \
-            --profiles="${{ inputs.profiles }}" \
-            --decision-every="${{ inputs.decision_every }}" \
-            --max-new-evals="${{ inputs.max_new_evals }}" \
-            --cache=data/jev-pilot-cache.jsonl \
-            --out=data/jev-pilot-summary.json
-      - name: Verify sealed-test marker
-        run: grep -q '"sealedTestBars"' data/jev-pilot-summary.json
-      - name: Tune apparatus from cached Jev probabilities
-        run: |
-          bun run research/tune-apparatus.ts data/market/pilot.csv \
-            --pilot=data/jev-pilot-summary.json \
-            --cache=data/jev-pilot-cache.jsonl \
-            --out=data/apparatus-selection.json
-      - name: Freeze chosen apparatus without evaluating test data
-        run: |
-          bun run research/freeze.ts data/market/pilot.csv \
-            --policy=data/apparatus-selection.json \
-            --symbol="${{ inputs.symbol }}" \
-            --kind=spot \
-            --allow-short=false \
-            --out=data/apparatus-freeze.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jev-pilot-${{ inputs.symbol }}-${{ github.run_id }}
-          path: |
-            data/market/pilot.csv
-            data/jev-pilot-summary.json
-            data/jev-pilot-cache.jsonl
-            data/apparatus-selection.json
-            data/apparatus-freeze.json
-          retention-days: 30
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use the manually budgeted safe-jev-direction-probe workflow instead."
