@@ -1,0 +1,76 @@
+name: generation2-cross-h8-zero-cost
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-cross-h8-zero-cost.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download exhausted generation-two partial artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35390431142
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35390431142
+      - name: Reconstruct cross h8 pilot from cache only
+        run: |
+          bun run research/portfolio-pilot.ts data/g2/universe/universe.json \
+            --model=jev \
+            --require-complete-grid=true \
+            --concurrency=4 \
+            --horizons=8 \
+            --profiles=cross \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=false \
+            --max-new-evals=0 \
+            --cache=data/g2/portfolio-pilot-cache.jsonl \
+            --out=data/g2/cross-h8-pilot.json
+      - name: Audit cross h8 validation confidence
+        run: |
+          bun run research/score-portfolio-signals.ts data/g2/universe/universe.json \
+            --model=jev \
+            --profile=cross \
+            --horizon=8 \
+            --decision-every=8 \
+            --split=validation \
+            --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/cross-h8-signal.txt
+      - name: Retune cross h8 with high-confidence gates
+        run: |
+          set -o pipefail
+          bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
+            --pilot=data/g2/cross-h8-pilot.json \
+            --cache=data/g2/portfolio-pilot-cache.jsonl \
+            --grid=full \
+            --out=data/g2/cross-h8-selection.json | tee data/g2/cross-h8-tune.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-cross-h8-zero-cost-${{ github.run_id }}
+          path: |
+            data/g2/cross-h8-pilot.json
+            data/g2/cross-h8-signal.txt
+            data/g2/cross-h8-selection.json
+            data/g2/cross-h8-tune.txt
+          retention-days: 30
