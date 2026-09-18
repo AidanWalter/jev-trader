@@ -142,11 +142,17 @@ jobs:
             echo "AUDIT $name"
             echo "  manifest $manifest"
             echo "  caches $caches"
+            set +e
             bun run research/audit-paid-cache.ts "$manifest" \
               --cache="$caches" \
               --fee-bps=4 \
               --slippage-bps=1 \
               --out="paid/audits/$name.json" | tee "paid/audits/$name.txt"
+            status=${PIPESTATUS[0]}
+            set -e
+            if [ "$status" -ne 0 ]; then
+              echo "AUDIT FAILED $name with status $status; continuing to preserve other paid datasets"
+            fi
           done
 
       - name: Print compact forensic summary
