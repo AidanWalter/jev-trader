@@ -43,9 +43,14 @@ on:
         description: Hard cap across all fresh Jev calls
         required: true
         default: "7000"
+      probe_run_id:
+        description: Optional completed jev-portfolio-probe run ID whose cache should be reused
+        required: false
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   pilot:
@@ -76,6 +81,29 @@ jobs:
             --end="${{ inputs.end }}" \
             --out-dir=data/market/universe \
             --manifest=data/market/universe/universe.json
+      - name: Download optional portfolio probe artifact
+        if: ${{ inputs.probe_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-probe-${{ inputs.probe_run_id }}
+          path: probe
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.probe_run_id }}
+      - name: Reuse verified portfolio probe cache
+        if: ${{ inputs.probe_run_id != '' }}
+        run: |
+          test -s probe/portfolio-probe-summary.json
+          test -s probe/portfolio-probe-cache.jsonl
+          ACTUAL="$(bun -e 'import { fingerprintUniverse } from "./research/universe"; console.log(fingerprintUniverse("data/market/universe/universe.json").combinedSha256)')"
+          PROBE="$(jq -r '.fingerprint.combinedSha256' probe/portfolio-probe-summary.json)"
+          if [ "$ACTUAL" != "$PROBE" ]; then
+            echo "Portfolio probe universe fingerprint does not match pilot universe"
+            exit 1
+          fi
+          cp probe/portfolio-probe-cache.jsonl data/portfolio-pilot-cache.jsonl
+          echo "Reusing portfolio probe cache from run ${{ inputs.probe_run_id }}"
       - name: Run development-only Jev portfolio pilot
         run: |
           bun run research/portfolio-pilot.ts data/market/universe/universe.json \
