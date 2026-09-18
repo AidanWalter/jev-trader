@@ -84,6 +84,24 @@ try {
 }
 check("token reservation blocks another request before cap can be exceeded", tokenRejected && tokenInner.calls === 1);
 
+const dollarLedger = new SpendBudgetLedger({
+  maxRequests: 10,
+  maxInputTokens: 100_000,
+  maxUsd: 0.000042,
+  usdPerMTok: 0.042,
+  reserveTokensPerRequest: 600,
+});
+const dollarInner = new FakePaidEvaluator();
+const dollarEval = new BudgetedEvaluator(dollarInner, dollarLedger);
+await dollarEval.evaluate(state);
+let dollarRejected = false;
+try {
+  await dollarEval.evaluate(state);
+} catch {
+  dollarRejected = true;
+}
+check("explicit dollar ceiling independently blocks another request", dollarRejected && dollarInner.calls === 1);
+
 const baseSignal: JevSignal = {
   version: "test",
   model: "jev",
