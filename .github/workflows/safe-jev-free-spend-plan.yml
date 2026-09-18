@@ -1,0 +1,47 @@
+name: safe-jev-free-spend-plan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/safe-jev-free-spend-plan.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download fixed generation-two market data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Count exact fixed-apparatus requests
+        run: |
+          {
+            echo "Conservative 1500 tokens/request:"
+            bun run research/jev-spend-plan.ts data/g2/universe/universe.json --horizon=8 --decision-every=8 --tokens-per-request=1500
+            echo
+            echo "Very conservative 2000 tokens/request:"
+            bun run research/jev-spend-plan.ts data/g2/universe/universe.json --horizon=8 --decision-every=8 --tokens-per-request=2000
+          } | tee data/g2/safe-spend-plan.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: safe-jev-free-spend-plan-${{ github.run_id }}
+          path: data/g2/safe-spend-plan.txt
+          retention-days: 30
