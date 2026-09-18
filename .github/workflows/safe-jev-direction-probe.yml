@@ -47,6 +47,15 @@ jobs:
             --horizon=8 \
             --decision-every=8 \
             --tokens-per-request=1500 | tee data/g2/spend-plan.txt
+      - name: Refuse duplicate paid probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=safe-jev-direction-probe-v1" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "safe-jev-direction-probe-v1 already exists; refusing duplicate paid probe"
+            exit 1
+          fi
       - name: Paid Jev direction probe, hard capped at 12 requests
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -66,7 +75,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: safe-jev-direction-probe-${{ github.run_id }}
+          name: safe-jev-direction-probe-v1
           path: |
             data/g2/spend-plan.txt
             data/g2/safe-direction-cache.jsonl
