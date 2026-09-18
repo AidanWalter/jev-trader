@@ -1,0 +1,51 @@
+name: generation2-calibrated-retune
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-calibrated-retune.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download completed generation-two technical/path cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Fit training-only calibration and validate
+        run: |
+          set -o pipefail
+          bun run research/tune-calibrated-portfolio.ts data/g2/universe/universe.json \
+            --pilot=data/g2/portfolio-pilot-summary.json \
+            --cache=data/g2/portfolio-pilot-cache.jsonl \
+            --calibration-fraction=0.70 \
+            --calibration-bins=31 \
+            --calibration-shrinkage=100 \
+            --out=data/g2/calibrated-selection.json | tee data/g2/calibrated-tune.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generation2-calibrated-retune-${{ github.run_id }}
+          path: |
+            data/g2/calibrated-selection.json
+            data/g2/calibrated-tune.txt
+          retention-days: 30
