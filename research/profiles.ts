@@ -56,18 +56,6 @@ export function projectState(state: FeatureState, profile: InputProfile) {
       ...(state.kind === "perp" ? funding : {}),
     };
   }
-  if (profile === "lean") {
-    return {
-      ...base,
-      returnsBps: state.returnsBps,
-      realizedVolBps: state.realizedVolBps,
-      rangeBps: state.rangeBps,
-      volumeRatio20: state.volumeRatio20,
-      trendBps20: state.trendBps20,
-      recentReturnsBps: state.recentReturnsBps.slice(-12),
-      ...(state.kind === "perp" ? funding : {}),
-    };
-  }
   if (profile === "path") {
     return {
       ...base,
