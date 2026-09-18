@@ -39,5 +39,7 @@ jobs:
         run: bun run research:check-live-boundary
       - name: Concurrent cache budget regression
         run: bun run research:check-cache-concurrency
+      - name: Safe Jev budget and direction-only regression
+        run: bun run research:check-safe-jev
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
