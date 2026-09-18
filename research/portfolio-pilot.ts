@@ -171,7 +171,7 @@ for (const horizonBars of horizons) {
         feeBps,
         slippageBps,
         spreadBpsFallback: Number(flag("spread-bps", "4")),
-        allowShort: flag("allow-short", "true") !== "false",
+        allowShort: flag("allow-short", "false") !== "false",
       },
     });
 
@@ -236,7 +236,7 @@ const summary = {
     feeBps,
     slippageBps,
     spreadBpsFallback: Number(flag("spread-bps", "4")),
-    allowShort: flag("allow-short", "true") !== "false",
+    allowShort: flag("allow-short", "false") !== "false",
   },
   features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
   cells,
