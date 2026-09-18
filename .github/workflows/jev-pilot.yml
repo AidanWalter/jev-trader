@@ -75,10 +75,26 @@ jobs:
             --out=data/jev-pilot-summary.json
       - name: Verify sealed-test marker
         run: grep -q '"sealedTestBars"' data/jev-pilot-summary.json
+      - name: Tune apparatus from cached Jev probabilities
+        run: |
+          bun run research/tune-apparatus.ts data/market/pilot.csv \
+            --pilot=data/jev-pilot-summary.json \
+            --cache=data/jev-pilot-cache.jsonl \
+            --out=data/apparatus-selection.json
+      - name: Freeze chosen apparatus without evaluating test data
+        run: |
+          bun run research/freeze.ts data/market/pilot.csv \
+            --policy=data/apparatus-selection.json \
+            --symbol="${{ inputs.symbol }}" \
+            --kind=spot \
+            --out=data/apparatus-freeze.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: jev-pilot-${{ inputs.symbol }}-${{ github.run_id }}
           path: |
             data/jev-pilot-summary.json
             data/jev-pilot-cache.jsonl
+            data/apparatus-selection.json
+            data/apparatus-freeze.json
           retention-days: 30
