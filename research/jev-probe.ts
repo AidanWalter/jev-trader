@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
+import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import type { InputProfile } from "./profiles";
@@ -43,6 +44,7 @@ const directionThresholdBpsFloor = Number(flag(
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
+const quality = assertResearchDataQuality(bars);
 const split = chronologicalSplit(bars);
 const ranges = chronologicalRanges(bars);
 const cache = new JsonlSignalCache(cachePath);
@@ -151,6 +153,8 @@ const summary = {
   modelName,
   dataset: {
     file,
+    intervalMs: quality.intervalMs,
+    irregularIntervals: quality.irregularIntervals,
     sha256: datasetHasher.digest("hex"),
     bars: bars.length,
     trainBars: split.train.length,
