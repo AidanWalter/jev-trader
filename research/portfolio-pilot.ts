@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
 import { mapLimit } from "./concurrency";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
@@ -24,13 +25,14 @@ if (!manifest) {
 }
 
 const modelName = flag("model", "jev")!;
-const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
+const paidModel = modelName.startsWith("jev");
+const concurrency = Math.max(1, Number(flag("concurrency", paidModel ? "1" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12")
   .split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "minimal,technical,path,cross,full") ?? "minimal,technical,path,cross,full")
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "4")));
-const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "20000" : "1000000000")));
+const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", paidModel ? "50" : "1000000000")));
 const requireCompleteGrid = flag("require-complete-grid", "false") === "true";
 const cachePath = flag("cache", "data/portfolio-pilot-cache.jsonl")!;
 const outPath = flag("out", "data/portfolio-pilot-summary.json")!;
@@ -44,6 +46,16 @@ const directionThresholdFixedCostBps = Number(flag(
   "direction-threshold-fixed-cost-bps",
   String(2 * slippageBps + 2 * feeBps),
 ));
+const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
+const spendLedger = paidModel
+  ? new SpendBudgetLedger(defaultSpendBudget({
+      maxRequests: Math.max(1, Number(flag("max-paid-requests", "50"))),
+      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "125000"))),
+      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.01"))),
+      usdPerMTok,
+      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
+    }))
+  : null;
 
 const rawAssets = loadUniverse(manifest);
 for (const asset of rawAssets) assertResearchDataQuality(asset.bars);
@@ -134,6 +146,7 @@ for (const horizonBars of horizons) {
 
   for (const profile of profiles) {
     const raw = createReplayEvaluator(modelName, profile);
+    const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
     const allDevStates = [...trainStates, ...validationStates];
     const missing = allDevStates.filter((x) => !cache.has(raw.name, x.state)).length;
     const remaining = Math.max(0, maxNewEvaluations - usedNewEvaluations);
@@ -151,7 +164,7 @@ for (const horizonBars of horizons) {
       continue;
     }
 
-    const evaluator = new CachedEvaluator(raw, cache, remaining);
+    const evaluator = new CachedEvaluator(paidRaw, cache, remaining);
     const train = await scoreStates(trainStates, evaluator, horizonBars);
     const validation = await scoreStates(validationStates, evaluator, horizonBars);
     const validationReplay = await replayPortfolio(assets, {
@@ -241,6 +254,8 @@ const summary = {
     allowShort: flag("allow-short", "false") !== "false",
   },
   features: { directionThresholdBpsFloor, directionThresholdFixedCostBps },
+  spendBudget: spendLedger?.budget ?? null,
+  spend: spendLedger?.snapshot() ?? null,
   cells,
 };
 
@@ -248,6 +263,7 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(summary, null, 2) + "\n");
 console.log("wrote " + outPath);
 console.log("sealed test remained untouched: " + split.test.length + " synchronized bars");
+if (spendLedger) console.log("HARD SPEND RECEIPT " + JSON.stringify(spendLedger.snapshot()));
 if (requireCompleteGrid) {
   const incomplete = cells.filter((x) => x.status !== "complete");
   if (incomplete.length) {
