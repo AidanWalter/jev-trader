@@ -238,6 +238,42 @@ jobs:
             --max-gross=1 \
             --max-asset=0.5 \
             --allow-short=true | tee data/perp-portfolio.txt
+      - name: Build and freeze mock perpetual apparatus
+        run: |
+          bun run research/portfolio-pilot.ts data/market/perp-universe/universe.json \
+            --model=mock \
+            --horizons=6,12 \
+            --profiles=full \
+            --decision-every=8 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --allow-short=true \
+            --max-new-evals=100000 \
+            --cache=data/mock-perp-live-cache.jsonl \
+            --out=data/mock-perp-live-pilot.json
+          bun run research/tune-portfolio-apparatus.ts data/market/perp-universe/universe.json \
+            --pilot=data/mock-perp-live-pilot.json \
+            --cache=data/mock-perp-live-cache.jsonl \
+            --grid=fast \
+            --short-borrow-bps-day=0 \
+            --out=data/mock-perp-live-selection.json
+          bun run research/freeze-portfolio.ts data/market/perp-universe/universe.json \
+            --selection=data/mock-perp-live-selection.json \
+            --short-borrow-bps-day=0 \
+            --allow-unqualified=true \
+            --out=data/mock-perp-live-freeze.json
+      - name: Initialize funding-aware frozen perpetual live paper state
+        run: |
+          bun run research/live-frozen-binance-portfolio-paper.ts data/mock-perp-live-freeze.json \
+            --cache=data/mock-perp-live-cache.jsonl \
+            --cycles=1 \
+            --state=data/mock-perp-live-state.json \
+            --events=data/mock-perp-live-events.jsonl
+          test -s data/mock-perp-live-state.json
+          test -s data/mock-perp-live-events.jsonl
+          grep -q '"version": "frozen-binance-portfolio-paper-v2"' data/mock-perp-live-state.json
+          grep -q '"marketKind":"perp"' data/mock-perp-live-events.jsonl
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -245,6 +281,11 @@ jobs:
           path: |
             data/market/perp-universe/universe.json
             data/perp-portfolio.txt
+            data/mock-perp-live-pilot.json
+            data/mock-perp-live-selection.json
+            data/mock-perp-live-freeze.json
+            data/mock-perp-live-state.json
+            data/mock-perp-live-events.jsonl
           retention-days: 14
 
   public-stock-portfolio:
