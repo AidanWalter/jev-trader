@@ -74,8 +74,9 @@ const intervalMap = new Map<number, string>([
   [21_600_000, "6h"], [28_800_000, "8h"], [43_200_000, "12h"], [86_400_000, "1d"],
 ]);
 const intervalMs = Number(flag("interval-ms", String(freeze.dataset.intervalMs ?? 0)));
-const interval = flag("interval", intervalMap.get(intervalMs));
-if (!interval) throw new Error("could not map frozen interval to Binance interval; pass --interval explicitly");
+const intervalCandidate = flag("interval", intervalMap.get(intervalMs));
+if (!intervalCandidate) throw new Error("could not map frozen interval to Binance interval; pass --interval explicitly");
+const interval: string = intervalCandidate;
 
 const symbol = flag("symbol", freeze.dataset.symbol)!.toUpperCase();
 if (symbol !== freeze.dataset.symbol.toUpperCase()) throw new Error("symbol differs from frozen apparatus");
