@@ -4,6 +4,7 @@ export const defaultFeatureConfig: FeatureConfig = {
   horizonBars: 12,
   minHistoryBars: 50,
   spreadBpsFallback: 5,
+  directionThresholdSpreadMultiple: 1,
   recentPoints: 24,
 };
 
@@ -52,6 +53,7 @@ export function buildFeatureState(
   const recentVolume = bars.slice(Math.max(0, index - 20), index).map((x) => x.volume).filter((x) => x > 0);
   const avgVolume = mean(recentVolume);
   const sma20 = mean(bars.slice(Math.max(0, index - 19), index + 1).map((x) => x.close));
+  const spreadBps = cur.spreadBps ?? config.spreadBpsFallback;
   const recentReturnsBps: number[] = [];
   const start = Math.max(1, index - config.recentPoints + 1);
   for (let i = start; i <= index; i++) recentReturnsBps.push(Number(ret(bars, i, 1).toFixed(3)));
@@ -63,7 +65,8 @@ export function buildFeatureState(
     intervalMs: inferIntervalMs(bars, index),
     horizonBars: config.horizonBars,
     price: cur.close,
-    spreadBps: cur.spreadBps ?? config.spreadBpsFallback,
+    spreadBps,
+    directionThresholdBps: Number(Math.max(1, spreadBps * config.directionThresholdSpreadMultiple).toFixed(3)),
     returnsBps: {
       r1: Number(ret(bars, index, 1).toFixed(3)),
       r3: Number(ret(bars, index, 3).toFixed(3)),
