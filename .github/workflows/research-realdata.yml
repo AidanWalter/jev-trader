@@ -26,13 +26,13 @@ jobs:
       - name: Download fixed BTC sample
         run: bun run scripts/download-binance-klines.ts --symbol=BTCUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/btc.csv
       - name: Momentum baseline
-        run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
+        run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
-        run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
+        run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
       - name: Walk-forward baseline
-        run: bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
+        run: set -o pipefail; bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
       - name: Perfect-foresight viability bound
-        run: bun run research/oracle-bound.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --horizon=12 --decision-every=4 | tee data/oracle.txt
+        run: set -o pipefail; bun run research/oracle-bound.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --horizon=12 --decision-every=4 | tee data/oracle.txt
       - uses: actions/upload-artifact@v4
         with:
           name: btc-public-data-baselines
@@ -70,9 +70,9 @@ jobs:
           }
           JSON
       - name: Momentum portfolio
-        run: bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
+        run: set -o pipefail; bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
       - name: Random portfolio
-        run: bun run research/run-portfolio.ts data/market/universe.json --model=random --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-random.txt
+        run: set -o pipefail; bun run research/run-portfolio.ts data/market/universe.json --model=random --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-random.txt
       - uses: actions/upload-artifact@v4
         with:
           name: crypto-portfolio-baselines
