@@ -1,0 +1,53 @@
+name: generation2-slow-cadence-scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-slow-cadence-scan.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Reuse fixed long-window market artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Scan 12-hour decision cadence
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev --horizons=8,12,24,48 --decision-every=12 \
+            --top-n=2 --max-gross=1 --max-asset=0.5 --allow-short=false | tee data/g2/oracle-every12.txt
+      - name: Scan 24-hour decision cadence
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev --horizons=8,12,24,48 --decision-every=24 \
+            --top-n=2 --max-gross=1 --max-asset=0.5 --allow-short=false | tee data/g2/oracle-every24.txt
+      - name: Scan 48-hour decision cadence
+        run: |
+          bun run research/oracle-portfolio-bound.ts data/g2/universe/universe.json \
+            --split=dev --horizons=8,12,24,48 --decision-every=48 \
+            --top-n=2 --max-gross=1 --max-asset=0.5 --allow-short=false | tee data/g2/oracle-every48.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generation2-slow-cadence-scan-${{ github.run_id }}
+          path: data/g2/oracle-every*.txt
+          retention-days: 30
