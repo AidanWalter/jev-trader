@@ -150,7 +150,7 @@ for (const horizonBars of horizons) {
       evaluator,
       features: { horizonBars },
       startIndex: ranges.validation.start,
-      endIndex: ranges.validation.end - 2,
+      endIndex: ranges.validation.end - horizonBars - 1,
       decisionEveryBars,
       execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
     });
