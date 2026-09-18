@@ -4,6 +4,7 @@ import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { choosePolicyAction } from "./policy";
+import { classifyLiveBoundary } from "./live-boundary";
 import { allocatePortfolioTargets, type PortfolioCandidate } from "./portfolio";
 import type { InputProfile } from "./profiles";
 import type { MarketBar, PolicyConfig } from "./types";
@@ -445,21 +446,25 @@ while (cycles === 0 || cycle < cycles) {
       );
     } else if (live && live.ts > state.lastOpenTs) {
       const current = live.bars;
-      const gapBars = Math.max(1, Math.round((live.ts - state.lastOpenTs) / freeze.universe.intervalMs));
+      const boundary = classifyLiveBoundary(
+        state.lastOpenTs,
+        live.ts,
+        latestClosedTs,
+        freeze.universe.intervalMs,
+      );
       const borrow = accrueBorrow(state, current);
       state.lastOpenTs = live.ts;
 
       let targets: Record<string, number> | null = null;
       let fills: any[] = [];
-      const latestClosedIsPriorBar = latestClosedTs + freeze.universe.intervalMs === live.ts;
-      if (gapBars > 1 || !latestClosedIsPriorBar) {
+      if (!boundary.clean) {
         state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
         writeEvent({
           type: "session-gap",
           at: Date.now(),
           currentBarTs: live.ts,
           latestClosedTs,
-          gapBars,
+          gapBars: boundary.gapBars,
           note: "No overnight or missed-boundary fill was simulated.",
         });
       } else {
@@ -478,7 +483,7 @@ while (cycles === 0 || cycle < cycles) {
         new Date(live.ts).toISOString() +
         " · stock · equity $" + markEquity(state, openPrices).toFixed(2) +
         " · gross " + gross.toFixed(3) +
-        (gapBars > 1 ? " · session/missed-bar reset" : "") +
+        (!boundary.clean ? " · session/missed-bar reset" : "") +
         (targets ? " · decision and same-boundary fill simulation" : " · no decision this bar") +
         (fills.length ? " · fills " + fills.length : "") +
         (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
