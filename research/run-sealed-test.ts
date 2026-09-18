@@ -5,7 +5,7 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
-import { chronologicalSplit } from "./splits";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
 import type { AssetKind, PolicyConfig } from "./types";
 
 interface FreezeRecord {
@@ -66,6 +66,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
     });
 if (bars.length !== record.dataset.bars) throw new Error("dataset bar count differs from frozen apparatus");
 const split = chronologicalSplit(bars);
+const ranges = chronologicalRanges(bars);
 if (
   split.test.length !== record.dataset.testBars ||
   split.test[0]?.ts !== record.dataset.testStartTs ||
@@ -80,10 +81,12 @@ if (raw.name !== record.evaluator.namespace) {
 
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "0")));
 const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
-const result = await replayBars(split.test, {
+const result = await replayBars(bars, {
   evaluator,
   policy: record.policy,
   features: { horizonBars: record.features.horizonBars },
+  startIndex: ranges.test.start,
+  endIndex: ranges.test.end - 2,
   decisionEveryBars: record.cadence.decisionEveryBars,
   execution: {
     initialCash: record.execution.initialCash,
