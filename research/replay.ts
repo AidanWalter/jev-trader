@@ -18,6 +18,7 @@ export const defaultExecutionConfig: ExecutionConfig = {
   feeBps: 2,
   slippageBps: 1,
   spreadBpsFallback: 5,
+  spreadCostMultiplier: 1,
   maxGrossExposure: 1,
   minTradeNotional: 1,
   allowShort: true,
@@ -178,7 +179,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     const state = buildFeatureState(bars, i, features);
     if (!state) continue;
     const signal = await options.evaluator.evaluate(state);
-    const roundTripCostBps = state.spreadBps + 2 * execution.slippageBps + 2 * execution.feeBps;
+    const roundTripCostBps = state.spreadBps * execution.spreadCostMultiplier + 2 * execution.slippageBps + 2 * execution.feeBps;
     const action = choosePolicyAction(signal, exposure(bar.close), policy, {
       directionThresholdBps: state.directionThresholdBps,
       estimatedRoundTripCostBps: roundTripCostBps,
@@ -202,7 +203,7 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
       if (estNotional >= execution.minTradeNotional) {
         const side = delta > 0 ? "buy" : "sell";
         const spread = next.spreadBps ?? bar.spreadBps ?? execution.spreadBpsFallback;
-        const friction = spread / 2 + execution.slippageBps;
+        const friction = spread * execution.spreadCostMultiplier / 2 + execution.slippageBps;
         const price = next.open * (1 + (side === "buy" ? 1 : -1) * friction / 10_000);
         const beforeSign = sgn(quantity);
         const notional = Math.abs(delta * price);
