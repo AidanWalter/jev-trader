@@ -80,27 +80,39 @@ const minChanges = fast ? [0.08, 0.18] : [0.05, 0.12, 0.20];
 const sizeThresholdSets: [number, number, number][] = fast
   ? [[0.08, 0.20, 0.36], [0.12, 0.26, 0.44]]
   : [[0.06, 0.16, 0.30], [0.10, 0.22, 0.38], [0.14, 0.28, 0.46]];
+const cadenceCandidates = [...new Set(
+  (fast ? [1, 2] : [1, 2, 3, 4]).map((m) => pilot.decisionEveryBars * m)
+)];
 
 function objective(r: PortfolioResult) {
   const ddPenalty = Math.abs(Math.min(0, r.maxDrawdownPct)) * 0.6;
-  const turnoverPenalty = Math.max(0, r.turnover - 25) * 0.03;
+  const days = Math.max(1, (r.endTs - r.startTs) / 86_400_000);
+  const turnoverPerDay = r.turnover / days;
+  const turnoverPenalty = Math.max(0, turnoverPerDay - 1.25) * 0.5;
   const inactivityPenalty = r.fills.length === 0 ? 2 : 0;
   return r.returnPct - ddPenalty - turnoverPenalty - inactivityPenalty;
 }
 
 const costStressMultipliers = [1, 1.5, 2] as const;
 
-function validationSegments() {
+function validationSegments(decisionEveryBars: number) {
   const start = ranges.validation.start;
   const end = ranges.validation.end;
-  const rawMid = Math.floor((start + end) / 2);
-  const alignedMid =
-    start + Math.max(1, Math.floor((rawMid - start) / pilot.decisionEveryBars)) * pilot.decisionEveryBars;
-  const mid = Math.min(end - pilot.decisionEveryBars, alignedMid);
-  return [
-    { name: "early", start, end: mid },
-    { name: "late", start: mid, end },
-  ];
+  const span = end - start;
+  const cuts = [0, 0.25, 0.5, 0.75, 1].map((f, idx) => {
+    if (idx === 0) return start;
+    if (idx === 4) return end;
+    const raw = start + Math.floor(span * f);
+    const aligned =
+      start + Math.max(1, Math.floor((raw - start) / decisionEveryBars)) * decisionEveryBars;
+    return Math.min(end - decisionEveryBars, aligned);
+  });
+  const out = [];
+  for (let i = 0; i < 4; i++) {
+    if (cuts[i + 1]! <= cuts[i]!) continue;
+    out.push({ name: "q" + (i + 1), start: cuts[i]!, end: cuts[i + 1]! });
+  }
+  return out;
 }
 
 async function replayCell(
@@ -111,6 +123,7 @@ async function replayCell(
   maxAssetExposure: number,
   range: { start: number; end: number },
   costMultiplier = 1,
+  decisionEveryBars = pilot.decisionEveryBars,
 ) {
   return replayPortfolio(assets, {
     evaluator,
@@ -120,7 +133,7 @@ async function replayCell(
     maxAssetExposure,
     startIndex: Math.max(50, range.start),
     endIndex: range.end - cell.horizonBars - 1,
-    decisionEveryBars: pilot.decisionEveryBars,
+    decisionEveryBars,
     features: {
       horizonBars: cell.horizonBars,
       directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
@@ -145,7 +158,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
     throw new Error("evaluator namespace changed since pilot for " + cell.profile + " h=" + cell.horizonBars);
   }
   const evaluator = new CachedEvaluator(raw, cache, 0);
-  let best: { policy: PolicyConfig; topN: number; maxAssetExposure: number; train: PortfolioResult; score: number } | null = null;
+  let best: { policy: PolicyConfig; topN: number; maxAssetExposure: number; decisionEveryBars: number; train: PortfolioResult; score: number } | null = null;
 
   for (const minDirectionalEdge of edges) {
     for (const minDirectionalConfidence of confidences) {
@@ -162,7 +175,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
               };
               const train = await replayCell(evaluator, cell, policy, topN, maxAssetExposure, ranges.train);
               const score = objective(train);
-              if (!best || score > best.score) best = { policy, topN, maxAssetExposure, train, score };
+              if (!best || score > best.score) best = { policy, topN, maxAssetExposure, decisionEveryBars: pilot.decisionEveryBars, train, score };
             }
           }
         }
@@ -171,32 +184,37 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
   }
 
   let refined = best!;
-  for (const flatExitProbability of flatExits) {
-    for (const minExposureChange of minChanges) {
-      for (const sizeScoreThresholds of sizeThresholdSets) {
-        const policy: PolicyConfig = {
-          ...best!.policy,
-          flatExitProbability,
-          minExposureChange,
-          sizeScoreThresholds,
-        };
-        const train = await replayCell(
-          evaluator,
-          cell,
-          policy,
-          best!.topN,
-          best!.maxAssetExposure,
-          ranges.train,
-        );
-        const score = objective(train);
-        if (score > refined.score) {
-          refined = {
-            policy,
-            topN: best!.topN,
-            maxAssetExposure: best!.maxAssetExposure,
-            train,
-            score,
+  for (const decisionEveryBars of cadenceCandidates) {
+    for (const flatExitProbability of flatExits) {
+      for (const minExposureChange of minChanges) {
+        for (const sizeScoreThresholds of sizeThresholdSets) {
+          const policy: PolicyConfig = {
+            ...best!.policy,
+            flatExitProbability,
+            minExposureChange,
+            sizeScoreThresholds,
           };
+          const train = await replayCell(
+            evaluator,
+            cell,
+            policy,
+            best!.topN,
+            best!.maxAssetExposure,
+            ranges.train,
+            1,
+            decisionEveryBars,
+          );
+          const score = objective(train);
+          if (score > refined.score) {
+            refined = {
+              policy,
+              topN: best!.topN,
+              maxAssetExposure: best!.maxAssetExposure,
+              decisionEveryBars,
+              train,
+              score,
+            };
+          }
         }
       }
     }
@@ -213,6 +231,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
       best!.maxAssetExposure,
       ranges.validation,
       multiplier,
+      best!.decisionEveryBars,
     );
     validationStress.push({
       multiplier,
@@ -235,7 +254,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
   const stress2 = validationStress.find((x) => x.multiplier === 2)!;
 
   const validationSegmentsResult = [];
-  for (const segment of validationSegments()) {
+  for (const segment of validationSegments(best!.decisionEveryBars)) {
     const r = await replayCell(
       evaluator,
       cell,
@@ -244,6 +263,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
       best!.maxAssetExposure,
       segment,
       1,
+      best!.decisionEveryBars,
     );
     validationSegmentsResult.push({
       name: segment.name,
@@ -274,6 +294,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
     profile: cell.profile,
     evaluatorNamespace: cell.evaluatorNamespace,
     policy: best!.policy,
+    decisionEveryBars: best!.decisionEveryBars,
     portfolio: {
       topN: best!.topN,
       maxGrossExposure: pilot.portfolio.maxGrossExposure,
@@ -306,6 +327,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
     " · 1.5x " + stress15.metrics.returnPct.toFixed(2) + "%" +
     " · 2x " + stress2.metrics.returnPct.toFixed(2) + "%" +
     " · halves " + validationSegmentsResult.map((x) => x.metrics.returnPct.toFixed(2) + "%").join("/") +
+    " · cadence " + best!.decisionEveryBars +
     " · topN " + best!.topN +
     " · maxAsset " + best!.maxAssetExposure.toFixed(2)
   );
@@ -324,8 +346,14 @@ if (chosen.validationMetrics.fills < 10) reasons.push("fewer than 10 validation 
 if (!(chosen.validationObjective > 0)) reasons.push("nominal validation objective is not positive");
 const losingValidationSegments = (chosen.validationSegments ?? []).filter((x: any) => !(x.metrics.returnPct > 0));
 if (losingValidationSegments.length) {
-  reasons.push("one or more chronological validation halves are not positive: " + losingValidationSegments.map((x: any) => x.name).join(","));
+  reasons.push("one or more chronological validation segments are not positive: " + losingValidationSegments.map((x: any) => x.name).join(","));
 }
+const weakObjectiveSegments = (chosen.validationSegments ?? []).filter((x: any) => !(x.objective > 0));
+if (weakObjectiveSegments.length) {
+  reasons.push("one or more chronological validation segment objectives are not positive: " + weakObjectiveSegments.map((x: any) => x.name).join(","));
+}
+if (!(chosen.weakestSegmentObjective > 0)) reasons.push("weakest validation segment objective is not positive");
+if (!(chosen.robustValidationObjective > 0)) reasons.push("robust validation objective is not positive");
 
 const selection = {
   version: "portfolio-apparatus-selection-v1",
@@ -340,7 +368,7 @@ const selection = {
   sealedTestBars: split.test.length,
   chosen,
   grid,
-  policyRefinement: { flatExits, minChanges, sizeThresholdSets },
+  policyRefinement: { flatExits, minChanges, sizeThresholdSets, cadenceCandidates },
   costStressMultipliers,
   qualification: {
     passed: reasons.length === 0,
@@ -350,7 +378,9 @@ const selection = {
       positiveReturnAtCostMultiplier: 2,
       minimumValidationFills: 10,
       positiveNominalObjective: true,
-      positiveEachChronologicalValidationHalf: true,
+      positiveEachChronologicalValidationSegment: true,
+      positiveEachChronologicalValidationSegmentObjective: true,
+      positiveRobustValidationObjective: true,
     },
   },
   candidates,
