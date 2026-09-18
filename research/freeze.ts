@@ -26,6 +26,7 @@ interface ApparatusSelectionFile {
   evaluatorKind: string;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
   features: { directionThresholdBpsFloor: number };
+  qualification?: { passed: boolean; reasons?: string[] };
   chosen: {
     horizonBars: number;
     profile: string;
@@ -74,7 +75,18 @@ if (!file || !policyFile) {
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
 const out = flag("out", "data/apparatus-freeze.json")!;
-const selected = normalizeSelection(JSON.parse(readFileSync(policyFile, "utf8")) as SelectedPolicyFile | ApparatusSelectionFile);
+const allowUnqualified = flag("allow-unqualified", "false") === "true";
+const rawSelection = JSON.parse(readFileSync(policyFile, "utf8")) as SelectedPolicyFile | ApparatusSelectionFile;
+if (
+  (rawSelection as ApparatusSelectionFile).version === "apparatus-selection-v1" &&
+  (rawSelection as ApparatusSelectionFile).qualification &&
+  !(rawSelection as ApparatusSelectionFile).qualification!.passed &&
+  !allowUnqualified
+) {
+  const reasons = (rawSelection as ApparatusSelectionFile).qualification!.reasons ?? [];
+  throw new Error("apparatus failed validation qualification: " + reasons.join("; "));
+}
+const selected = normalizeSelection(rawSelection);
 
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
