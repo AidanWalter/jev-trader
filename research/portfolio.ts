@@ -12,6 +12,7 @@ export interface PortfolioReplayOptions {
   maxGrossExposure?: number;
   maxAssetExposure?: number;
   topN?: number;
+  maxExecutionGapMultiple?: number;
 }
 
 export interface PortfolioFill {
@@ -79,6 +80,11 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
   const maxGross = Math.max(0, options.maxGrossExposure ?? execution.maxGrossExposure);
   const maxAsset = Math.max(0, options.maxAssetExposure ?? Math.min(1, maxGross));
   const topN = Math.max(1, Math.floor(options.topN ?? assets.length));
+  const typicalIntervals = new Map<string, number>();
+  for (const asset of assets) {
+    const diffs = asset.bars.slice(1).map((b, i) => b.ts - asset.bars[i]!.ts).filter((x) => x > 0).sort((a, b) => a - b);
+    typicalIntervals.set(asset.spec.symbol, diffs.length ? diffs[Math.floor(diffs.length / 2)]! : 0);
+  }
   const start = features.minHistoryBars;
   const end = n - 2;
   if (start > end) throw new Error("not enough synchronized bars after feature warmup");
@@ -170,6 +176,13 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         const targetExposure = (raw.get(symbol) ?? 0) * scale;
         const next = asset.bars[nextIndex]!;
         if (!(next.open > 0)) continue;
+        const normalMs = typicalIntervals.get(symbol) ?? 0;
+        const gapMultiple = options.maxExecutionGapMultiple ?? (asset.spec.kind === "stock" ? 2 : Infinity);
+        const executionGapOk =
+          !Number.isFinite(gapMultiple) ||
+          !normalMs ||
+          next.ts - asset.bars[i]!.ts <= normalMs * gapMultiple;
+        if (!executionGapOk) continue;
 
         const targetNotional = portfolioEquity * targetExposure;
         const targetQ = targetNotional / next.open;
