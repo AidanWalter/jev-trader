@@ -8,7 +8,10 @@ const flag = (name: string, fallback?: string) => {
 };
 
 const selectionDate = flag("selection-date", "2025-01-02")!;
-const from = flag("from", selectionDate)!;
+const selectionMs = Date.parse(selectionDate + "T00:00:00Z");
+if (!Number.isFinite(selectionMs)) throw new Error("invalid --selection-date");
+const defaultFrom = new Date(selectionMs + 86_400_000).toISOString().slice(0, 10);
+const from = flag("from", defaultFrom)!;
 const to = flag("to", "2025-02-01")!;
 const top = Math.max(1, Number(flag("top", "10")));
 const multiplier = Math.max(1, Number(flag("multiplier", "15")));
@@ -19,6 +22,10 @@ const outDir = flag("out-dir", "data/market/polygon-universe")!;
 const manifestPath = flag("manifest", outDir + "/universe.json")!;
 const apiKey = process.env.POLYGON_API_KEY;
 if (!apiKey) throw new Error("POLYGON_API_KEY is required");
+const fromMs = Date.parse(from + "T00:00:00Z");
+if (!Number.isFinite(fromMs) || fromMs <= selectionMs) {
+  throw new Error("--from must be strictly after --selection-date so universe selection cannot look ahead");
+}
 
 type Grouped = { T: string; c: number; v?: number; vw?: number };
 type Agg = { t: number; o: number; h: number; l: number; c: number; v?: number };
