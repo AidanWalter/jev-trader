@@ -145,7 +145,6 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
   let quantity = 0;
   let fees = 0;
   let borrowCost = 0;
-  let fundingPnl = 0;
   let fundingNet = 0;
   let episodeStart: number | null = null;
   const episodePnls: number[] = [];
