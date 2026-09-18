@@ -50,12 +50,6 @@ export interface FeatureState {
   volumeRatio20: number;
   trendBps20: number;
   recentReturnsBps: number[];
-  /** Point-in-time realized funding context for perpetuals only. */
-  funding?: {
-    lastBps: number;
-    mean3Bps: number;
-    hoursSinceLast: number;
-  };
 }
 
 export type Direction = "long" | "flat" | "short";
