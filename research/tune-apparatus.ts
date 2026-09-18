@@ -22,7 +22,13 @@ interface PilotSummary {
   dataset: { sha256: string; bars: number };
   decisionEveryBars: number;
   modelName: string;
-  execution: { spreadBps: number; feeBps: number; slippageBps: number };
+  execution: {
+    spreadBps: number;
+    feeBps: number;
+    slippageBps: number;
+    allowShort?: boolean;
+    shortBorrowBpsPerDay?: number;
+  };
   features: { directionThresholdBpsFloor: number; directionThresholdFixedCostBps?: number };
   rows: PilotRow[];
 }
@@ -121,6 +127,8 @@ async function validateUnderCosts(
         slippageBps: pilot.execution.slippageBps * multiplier,
         spreadBpsFallback: pilot.execution.spreadBps,
         spreadCostMultiplier: multiplier,
+        allowShort: pilot.execution.allowShort ?? (pilot.kind === "perp"),
+        shortBorrowBpsPerDay: pilot.execution.shortBorrowBpsPerDay ?? (pilot.kind === "perp" ? 0 : 1),
       },
     });
     out.push({ multiplier, metrics: r.metrics, objective: objective(r.metrics) });
@@ -165,6 +173,8 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
                 feeBps: pilot.execution.feeBps,
                 slippageBps: pilot.execution.slippageBps,
                 spreadBpsFallback: pilot.execution.spreadBps,
+                allowShort: pilot.execution.allowShort ?? (pilot.kind === "perp"),
+                shortBorrowBpsPerDay: pilot.execution.shortBorrowBpsPerDay ?? (pilot.kind === "perp" ? 0 : 1),
               },
             });
             const score = objective(r.metrics);
@@ -200,6 +210,8 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
             feeBps: pilot.execution.feeBps,
             slippageBps: pilot.execution.slippageBps,
             spreadBpsFallback: pilot.execution.spreadBps,
+            allowShort: pilot.execution.allowShort ?? (pilot.kind === "perp"),
+            shortBorrowBpsPerDay: pilot.execution.shortBorrowBpsPerDay ?? (pilot.kind === "perp" ? 0 : 1),
           },
         });
         const score = objective(r.metrics);
@@ -231,6 +243,8 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
         feeBps: pilot.execution.feeBps,
         slippageBps: pilot.execution.slippageBps,
         spreadBpsFallback: pilot.execution.spreadBps,
+        allowShort: pilot.execution.allowShort ?? (pilot.kind === "perp"),
+        shortBorrowBpsPerDay: pilot.execution.shortBorrowBpsPerDay ?? (pilot.kind === "perp" ? 0 : 1),
       },
     });
     validationSegmentsResult.push({
