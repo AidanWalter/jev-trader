@@ -116,6 +116,18 @@ jobs:
           test -s probe/perp-portfolio-probe-summary.json
           test -s probe/perp-portfolio-probe-cache.jsonl
           jq -e \
+            --arg horizons "${{ inputs.horizons }}" \
+            --arg profiles "${{ inputs.profiles }}" \
+            --argjson cadence "${{ inputs.decision_every }}" \
+            --argjson fee "${{ inputs.fee_bps }}" \
+            --argjson slip "${{ inputs.slippage_bps }}" \
+            '.horizons == ($horizons | split(",") | map(tonumber)) and
+             .profiles == ($profiles | split(",")) and
+             .decisionEveryBars == $cadence and
+             .execution.feeBps == $fee and
+             .execution.slippageBps == $slip' \
+            probe/perp-portfolio-probe-summary.json >/dev/null
+          jq -e \
             --arg symbols "${{ inputs.symbols }}" \
             --arg interval "${{ inputs.interval }}" \
             --arg start "${{ inputs.start }}" \
