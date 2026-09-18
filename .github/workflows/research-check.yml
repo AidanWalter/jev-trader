@@ -43,5 +43,7 @@ jobs:
         run: bun run research:check-spend-budget
       - name: Safe Jev budget and direction-only regression
         run: bun run research:check-safe-jev
+      - name: Paid workflow safety audit
+        run: bun run research:check-paid-workflows
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
