@@ -64,13 +64,14 @@ const cache = new JsonlSignalCache(flag("cache", "data/portfolio-pilot-cache.jso
 const outPath = flag("out", "data/portfolio-apparatus-selection.json")!;
 const grid = flag("grid", "full")!;
 const fast = grid === "fast";
+const directionOnly = flag("direction-only", "false") === "true";
 
 const edges = fast ? [0.08, 0.14] : [0.04, 0.08, 0.12, 0.16];
 const confidences = fast
   ? [0.58, 0.80, 0.90]
   : [0.42, 0.48, 0.54, 0.60, 0.70, 0.80, 0.90, 0.95];
-const adverse = fast ? [0.65, 0.90] : [0.55, 0.65, 0.75, 0.90];
-const costMultiples = fast ? [0.5, 1.25] : [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
+const adverse = directionOnly ? [1] : (fast ? [0.65, 0.90] : [0.55, 0.65, 0.75, 0.90]);
+const costMultiples = directionOnly ? [1] : (fast ? [0.5, 1.25] : [0.25, 0.5, 0.75, 1.0, 1.25, 1.5]);
 const topNs = fast
   ? [...new Set([Math.max(1, Math.min(pilot.portfolio.topN, assets.length)), Math.max(1, Math.min(2, assets.length))])]
   : [...new Set([1, Math.max(1, Math.min(2, assets.length)), Math.max(1, Math.min(3, assets.length)), Math.max(1, Math.min(pilot.portfolio.topN, assets.length))])];
@@ -170,6 +171,7 @@ for (const cell of pilot.cells.filter((x) => x.status === "complete")) {
             for (const maxAssetExposure of maxAssets) {
               const policy: PolicyConfig = {
                 ...defaultPolicyConfig,
+                directionOnly,
                 minDirectionalEdge,
                 minDirectionalConfidence,
                 maxAdverseSelection,
