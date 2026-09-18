@@ -78,6 +78,36 @@ function objective(m: ReplayMetrics) {
   return m.returnPct + sharpe * 0.5 - ddPenalty - turnoverPenalty - inactivityPenalty;
 }
 
+const costStressMultipliers = [1, 1.5, 2] as const;
+
+async function validateUnderCosts(
+  evaluator: CachedEvaluator,
+  cell: PilotRow,
+  policy: PolicyConfig,
+) {
+  const out: { multiplier: number; metrics: ReplayMetrics; objective: number }[] = [];
+  for (const multiplier of costStressMultipliers) {
+    const r = await replayBars(bars, {
+      evaluator,
+      policy,
+      features: {
+        horizonBars: cell.horizonBars,
+        directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+      },
+      startIndex: ranges.validation.start,
+      endIndex: ranges.validation.end - cell.horizonBars - 1,
+      decisionEveryBars: pilot.decisionEveryBars,
+      execution: {
+        feeBps: pilot.execution.feeBps * multiplier,
+        slippageBps: pilot.execution.slippageBps * multiplier,
+        spreadBpsFallback: pilot.execution.spreadBps * multiplier,
+      },
+    });
+    out.push({ multiplier, metrics: r.metrics, objective: objective(r.metrics) });
+  }
+  return out;
+}
+
 const candidates: any[] = [];
 for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
   const raw = createReplayEvaluator(pilot.modelName, cell.profile);
@@ -124,22 +154,14 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     }
   }
 
-  const validation = await replayBars(bars, {
-    evaluator,
-    policy: bestTrain!.policy,
-    features: {
-                horizonBars: cell.horizonBars,
-                directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
-              },
-    startIndex: ranges.validation.start,
-    endIndex: ranges.validation.end - cell.horizonBars - 1,
-    decisionEveryBars: pilot.decisionEveryBars,
-    execution: {
-      feeBps: pilot.execution.feeBps,
-      slippageBps: pilot.execution.slippageBps,
-      spreadBpsFallback: pilot.execution.spreadBps,
-    },
-  });
+  const validationStress = await validateUnderCosts(evaluator, cell, bestTrain!.policy);
+  const nominal = validationStress.find((x) => x.multiplier === 1)!;
+  const stress15 = validationStress.find((x) => x.multiplier === 1.5)!;
+  const stress2 = validationStress.find((x) => x.multiplier === 2)!;
+  const robustValidationObjective =
+    nominal.objective * 0.5 +
+    stress15.objective * 0.3 +
+    stress2.objective * 0.2;
 
   candidates.push({
     horizonBars: cell.horizonBars,
@@ -148,21 +170,41 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     policy: bestTrain!.policy,
     trainMetrics: bestTrain!.metrics,
     trainObjective: bestTrain!.score,
-    validationMetrics: validation.metrics,
-    validationObjective: objective(validation.metrics),
+    validationMetrics: nominal.metrics,
+    validationObjective: nominal.objective,
+    validationStress,
+    robustValidationObjective,
   });
   console.log(
     cell.profile + " h=" + cell.horizonBars +
     " · train " + bestTrain!.metrics.returnPct.toFixed(2) + "%" +
-    " · validation " + validation.metrics.returnPct.toFixed(2) + "%" +
-    " · DD " + validation.metrics.maxDrawdownPct.toFixed(2) + "%" +
-    " · orders " + validation.metrics.orders
+    " · validation " + nominal.metrics.returnPct.toFixed(2) + "%" +
+    " · 1.5x cost " + stress15.metrics.returnPct.toFixed(2) + "%" +
+    " · 2x cost " + stress2.metrics.returnPct.toFixed(2) + "%" +
+    " · DD " + nominal.metrics.maxDrawdownPct.toFixed(2) + "%" +
+    " · orders " + nominal.metrics.orders
   );
 }
 
 if (!candidates.length) throw new Error("pilot contains no complete apparatus cells");
-candidates.sort((a, b) => b.validationObjective - a.validationObjective);
+candidates.sort((a, b) => b.robustValidationObjective - a.robustValidationObjective);
 const chosen = candidates[0]!;
+const stress15 = chosen.validationStress.find((x: any) => x.multiplier === 1.5);
+const qualificationReasons: string[] = [];
+if (!(chosen.validationMetrics.returnPct > 0)) qualificationReasons.push("nominal validation return is not positive");
+if (!(stress15?.metrics.returnPct > 0)) qualificationReasons.push("validation return is not positive at 1.5x modeled costs");
+if (chosen.validationMetrics.orders < 10) qualificationReasons.push("fewer than 10 validation orders");
+if (!(chosen.validationObjective > 0)) qualificationReasons.push("nominal validation objective is not positive");
+const qualification = {
+  passed: qualificationReasons.length === 0,
+  reasons: qualificationReasons,
+  criteria: {
+    positiveNominalReturn: true,
+    positiveReturnAtCostMultiplier: 1.5,
+    minimumValidationOrders: 10,
+    positiveNominalObjective: true,
+  },
+};
 
 const selection = {
   version: "apparatus-selection-v1",
@@ -178,6 +220,8 @@ const selection = {
   sealedTestBars: split.test.length,
   chosen,
   grid,
+  costStressMultipliers,
+  qualification,
   candidates,
 };
 
@@ -185,5 +229,6 @@ writeFileSync(outPath, JSON.stringify(selection, null, 2) + "\n");
 console.log("");
 console.log("selected " + chosen.profile + " h=" + chosen.horizonBars + " from validation only");
 console.log("validation return " + chosen.validationMetrics.returnPct.toFixed(2) + "% · max DD " + chosen.validationMetrics.maxDrawdownPct.toFixed(2) + "% · orders " + chosen.validationMetrics.orders);
+console.log("qualification " + (qualification.passed ? "PASSED" : "FAILED") + (qualification.reasons.length ? " · " + qualification.reasons.join("; ") : ""));
 console.log("wrote " + outPath);
 console.log("sealed test remained untouched: " + split.test.length + " bars");
