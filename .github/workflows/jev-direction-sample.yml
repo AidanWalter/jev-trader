@@ -106,7 +106,7 @@ jobs:
             --out=data/sample/jev-direction-sample.json | tee data/sample/sample-output.txt
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: jev-direction-sample-canary-${{ inputs.canary_run_id }}
           path: |
@@ -116,3 +116,11 @@ jobs:
             data/sample/jev-direction-sample.json
             data/sample/sample-output.txt
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-sample-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
+
