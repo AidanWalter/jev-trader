@@ -58,6 +58,14 @@ const cfg = {
   directionThresholdFixedCostBps,
 };
 
+type ChoiceStats = {
+  n: number;
+  futureBps: number;
+  calledBps: number;
+  netBps: number;
+  correct: number;
+};
+
 type Bin = {
   n: number;
   correct: number;
@@ -65,10 +73,21 @@ type Bin = {
   calledBps: number;
   netBps: number;
   nonFlat: number;
+  long: ChoiceStats;
+  short: ChoiceStats;
 };
+const emptyChoice = (): ChoiceStats => ({ n: 0, futureBps: 0, calledBps: 0, netBps: 0, correct: 0 });
 const bins: Bin[] = Array.from({ length: 10 }, () => ({
-  n: 0, correct: 0, confidence: 0, calledBps: 0, netBps: 0, nonFlat: 0,
+  n: 0,
+  correct: 0,
+  confidence: 0,
+  calledBps: 0,
+  netBps: 0,
+  nonFlat: 0,
+  long: emptyChoice(),
+  short: emptyChoice(),
 }));
+const overallByChoice = { long: emptyChoice(), short: emptyChoice() };
 
 const series = assets.map((a) => ({ symbol: a.spec.symbol, bars: a.bars }));
 const directions: Direction[] = ["long", "flat", "short"];
@@ -116,7 +135,18 @@ for (let i = Math.max(cfg.minHistoryBars, range.start); i + horizonBars < range.
     bin.correct += choice === truth ? 1 : 0;
     bin.calledBps += called;
     bin.netBps += net;
-    if (choice !== "flat") bin.nonFlat++;
+    if (choice !== "flat") {
+      bin.nonFlat++;
+      const s = choice === "long" ? bin.long : bin.short;
+      const o = choice === "long" ? overallByChoice.long : overallByChoice.short;
+      for (const target of [s, o]) {
+        target.n++;
+        target.futureBps += retBps;
+        target.calledBps += called;
+        target.netBps += net;
+        if (choice === truth) target.correct++;
+      }
+    }
   }
 }
 
@@ -136,6 +166,17 @@ console.log(
   " · cost-adjusted " + (calledNetBps / n).toFixed(3) + " bps/state" +
   " · non-flat " + nonFlat
 );
+for (const choice of ["long", "short"] as const) {
+  const s = overallByChoice[choice];
+  if (!s.n) continue;
+  console.log(
+    choice + " calls · n " + s.n +
+    " · mean future " + (s.futureBps / s.n).toFixed(2) + " bps" +
+    " · called " + (s.calledBps / s.n).toFixed(2) + " bps" +
+    " · net " + (s.netBps / s.n).toFixed(2) + " bps" +
+    " · acc " + (s.correct / s.n * 100).toFixed(1) + "%"
+  );
+}
 console.log("confidence bins:");
 for (let i = 0; i < bins.length; i++) {
   const b = bins[i]!;
@@ -149,6 +190,17 @@ for (let i = 0; i < bins.length; i++) {
     " · net " + (b.netBps / b.n).toFixed(2) + " bps" +
     " · non-flat " + b.nonFlat
   );
+  for (const choice of ["long", "short"] as const) {
+    const s = b[choice];
+    if (!s.n) continue;
+    console.log(
+      "    " + choice +
+      " · n " + s.n +
+      " · mean future " + (s.futureBps / s.n).toFixed(2) + " bps" +
+      " · called " + (s.calledBps / s.n).toFixed(2) + " bps" +
+      " · net " + (s.netBps / s.n).toFixed(2) + " bps"
+    );
+  }
 }
 console.log(
   "cache hits " + cache.hits +
