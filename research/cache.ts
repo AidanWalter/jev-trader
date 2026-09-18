@@ -42,6 +42,11 @@ export class JsonlSignalCache {
     }
   }
 
+  has(namespace: string, state: FeatureState) {
+    const key = stateCacheKey(namespace, this.stateVersion, state);
+    return this.records.has(key);
+  }
+
   get(namespace: string, state: FeatureState) {
     const key = stateCacheKey(namespace, this.stateVersion, state);
     const signal = this.records.get(key);
