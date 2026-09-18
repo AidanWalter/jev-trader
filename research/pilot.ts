@@ -6,7 +6,7 @@ import { createReplayEvaluator } from "./evaluator";
 import { buildFeatureState, defaultFeatureConfig } from "./features";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
-import { chronologicalSplit } from "./splits";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
 import type { AssetKind, Direction, MarketBar } from "./types";
 
 const args = process.argv.slice(2);
@@ -39,6 +39,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 const split = chronologicalSplit(bars);
+const ranges = chronologicalRanges(bars);
 
 type Score = {
   n: number;
@@ -51,6 +52,8 @@ type Score = {
 
 async function score(
   bars: MarketBar[],
+  rangeStart: number,
+  rangeEnd: number,
   horizonBars: number,
   evaluator: CachedEvaluator,
 ): Promise<Score> {
@@ -63,7 +66,8 @@ async function score(
   let logLoss = 0;
   let calledReturn = 0;
 
-  for (let i = cfg.minHistoryBars; i + horizonBars < bars.length; i += decisionEveryBars) {
+  const start = Math.max(cfg.minHistoryBars, rangeStart);
+  for (let i = start; i + horizonBars < rangeEnd; i += decisionEveryBars) {
     const state = buildFeatureState(bars, i, cfg);
     if (!state) continue;
     const future = bars[i + horizonBars]!;
@@ -106,16 +110,18 @@ const cache = new JsonlSignalCache(cachePath);
 const rows: any[] = [];
 let usedNewEvaluations = 0;
 
-function scoreableCount(bars: MarketBar[], horizonBars: number) {
-  const start = defaultFeatureConfig.minHistoryBars;
-  if (start + horizonBars >= bars.length) return 0;
-  return Math.floor((bars.length - horizonBars - 1 - start) / decisionEveryBars) + 1;
+function scoreableCount(rangeStart: number, rangeEnd: number, horizonBars: number) {
+  const start = Math.max(defaultFeatureConfig.minHistoryBars, rangeStart);
+  if (start + horizonBars >= rangeEnd) return 0;
+  return Math.floor((rangeEnd - horizonBars - 1 - start) / decisionEveryBars) + 1;
 }
 
 for (const horizonBars of horizons) {
   for (const profile of profiles) {
     const raw = createReplayEvaluator(modelName, profile);
-    const expectedFreshCalls = scoreableCount(split.train, horizonBars) + scoreableCount(split.validation, horizonBars);
+    const expectedFreshCalls =
+      scoreableCount(ranges.train.start, ranges.train.end, horizonBars) +
+      scoreableCount(ranges.validation.start, ranges.validation.end, horizonBars);
     const remaining = Math.max(0, maxNewEvaluations - usedNewEvaluations);
     if (expectedFreshCalls > remaining && modelName === "jev") {
       rows.push({
@@ -132,12 +138,14 @@ for (const horizonBars of horizons) {
     }
 
     const evaluator = new CachedEvaluator(raw, cache, remaining);
-    const trainScore = await score(split.train, horizonBars, evaluator);
-    const validationScore = await score(split.validation, horizonBars, evaluator);
+    const trainScore = await score(bars, ranges.train.start, ranges.train.end, horizonBars, evaluator);
+    const validationScore = await score(bars, ranges.validation.start, ranges.validation.end, horizonBars, evaluator);
 
-    const validationReplay = await replayBars(split.validation, {
+    const validationReplay = await replayBars(bars, {
       evaluator,
       features: { horizonBars },
+      startIndex: ranges.validation.start,
+      endIndex: ranges.validation.end - 2,
       decisionEveryBars,
       execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
     });
