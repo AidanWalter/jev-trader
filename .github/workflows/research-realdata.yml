@@ -200,6 +200,85 @@ jobs:
             data/mock-portfolio-live-events.jsonl
           retention-days: 14
 
+  public-stock-portfolio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download recent public intraday stock bars
+        run: |
+          bun run scripts/download-yahoo-chart.ts --ticker=SPY --interval=15m --from=2026-08-20 --to=2026-09-16 --out=data/market/spy.csv
+          bun run scripts/download-yahoo-chart.ts --ticker=QQQ --interval=15m --from=2026-08-20 --to=2026-09-16 --out=data/market/qqq.csv
+          bun run scripts/download-yahoo-chart.ts --ticker=AAPL --interval=15m --from=2026-08-20 --to=2026-09-16 --out=data/market/aapl.csv
+      - name: Build public stock universe
+        run: |
+          cat > data/market/stock-public-universe.json <<'JSON'
+          {
+            "name": "yahoo-public-stock-smoke-15m",
+            "provider": "yahoo-chart-fallback",
+            "assets": [
+              { "file": "spy.csv", "symbol": "SPY", "kind": "stock", "spreadBps": 2 },
+              { "file": "qqq.csv", "symbol": "QQQ", "kind": "stock", "spreadBps": 2 },
+              { "file": "aapl.csv", "symbol": "AAPL", "kind": "stock", "spreadBps": 2 }
+            ]
+          }
+          JSON
+      - name: Mock stock portfolio pilot
+        run: |
+          bun run research/portfolio-pilot.ts data/market/stock-public-universe.json \
+            --model=mock \
+            --horizons=6,12 \
+            --profiles=full \
+            --decision-every=4 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --spread-bps=2 \
+            --fee-bps=1 \
+            --slippage-bps=1 \
+            --allow-short=false \
+            --max-new-evals=100000 \
+            --cache=data/mock-stock-public-cache.jsonl \
+            --out=data/mock-stock-public-pilot.json
+      - name: Tune and freeze mock stock apparatus
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/market/stock-public-universe.json \
+            --pilot=data/mock-stock-public-pilot.json \
+            --cache=data/mock-stock-public-cache.jsonl \
+            --grid=fast \
+            --out=data/mock-stock-public-selection.json
+          bun run research/freeze-portfolio.ts data/market/stock-public-universe.json \
+            --selection=data/mock-stock-public-selection.json \
+            --allow-unqualified=true \
+            --out=data/mock-stock-public-freeze.json
+      - name: Stock sealed preflight and execution
+        run: |
+          set -o pipefail
+          bun run research/portfolio-sealed-preflight.ts data/mock-stock-public-freeze.json \
+            --manifest=data/market/stock-public-universe.json \
+            --cache=data/mock-stock-public-cache.jsonl | tee data/mock-stock-public-preflight.txt
+          bun run research/run-portfolio-sealed-test.ts data/mock-stock-public-freeze.json \
+            --manifest=data/market/stock-public-universe.json \
+            --cache=data/mock-stock-public-cache.jsonl \
+            --max-new-evals=100000 \
+            --out=data/mock-stock-public-sealed.json | tee data/mock-stock-public-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-stock-portfolio-smoke
+          path: |
+            data/mock-stock-public-pilot.json
+            data/mock-stock-public-selection.json
+            data/mock-stock-public-freeze.json
+            data/mock-stock-public-preflight.txt
+            data/mock-stock-public-output.txt
+            data/mock-stock-public-sealed.json
+          retention-days: 14
+
   forward-paper-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
