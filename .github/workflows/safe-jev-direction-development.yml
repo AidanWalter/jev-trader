@@ -40,7 +40,7 @@ jobs:
       - name: Download verified 120-state canary
         uses: actions/download-artifact@v4
         with:
-          pattern: safe-jev-direction-canary-${{ inputs.canary_run_id }}
+          pattern: safe-jev-direction-canary-probe-*
           path: data/canary
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -64,6 +64,16 @@ jobs:
           bun run research/jev-spend-plan.ts data/g2-market/universe/universe.json \
             --horizon=8 --decision-every=8 --tokens-per-request=2000 | tee data/g2/development-spend-plan.txt
           grep -q "development total · requests 6996" data/g2/development-spend-plan.txt
+      - name: Refuse duplicate development expansion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="safe-jev-direction-development-canary-${{ inputs.canary_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate paid development run"
+            exit 1
+          fi
       - name: Paid fixed-apparatus Jev development cache
         env:
           TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
@@ -117,7 +127,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: safe-jev-direction-development-${{ github.run_id }}
+          name: safe-jev-direction-development-canary-${{ inputs.canary_run_id }}
           path: |
             data/g2-market/universe/
             data/g2/development-spend-plan.txt
