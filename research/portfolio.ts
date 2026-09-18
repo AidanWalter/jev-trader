@@ -161,7 +161,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         cash -= cost;
         borrowCost += cost;
       }
-      if (bar.kind === "perp" && bar.fundingBps) cash -= q * bar.close * bar.fundingBps / 10_000;
+      if (bar.kind === "perp" && bar.fundingBps) cash -= q * bar.open * bar.fundingBps / 10_000;
     }
 
     if ((i - start) % every === 0) {
