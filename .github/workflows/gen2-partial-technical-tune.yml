@@ -1,69 +1,15 @@
-name: gen2-partial-technical-tune
+name: gen2-partial-technical-tune-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  tune:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Download partial paid cache
-        uses: actions/download-artifact@v4
-        with:
-          pattern: gen2-perp-jev-pilot-35388518829
-          path: partial
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35388518829
-      - name: Build cache-only technical pilot summary
-        run: |
-          mkdir -p data/gen2-diagnostic
-          cp -R partial/universe data/gen2-diagnostic/universe
-          cp partial/jev-cache.jsonl data/gen2-diagnostic/cache.jsonl
-          bun run research/portfolio-pilot.ts data/gen2-diagnostic/universe/universe.json \
-            --model=jev \
-            --require-complete-grid=true \
-            --concurrency=4 \
-            --horizons=12 \
-            --profiles=technical \
-            --decision-every=4 \
-            --top-n=3 \
-            --max-gross=1 \
-            --max-asset=0.5 \
-            --allow-short=true \
-            --fee-bps=4 \
-            --slippage-bps=1 \
-            --spread-bps=4 \
-            --max-new-evals=0 \
-            --cache=data/gen2-diagnostic/cache.jsonl \
-            --out=data/gen2-diagnostic/pilot.json
-      - name: Hardened cache-only tune
-        run: |
-          bun run research/tune-portfolio-apparatus.ts data/gen2-diagnostic/universe/universe.json \
-            --pilot=data/gen2-diagnostic/pilot.json \
-            --cache=data/gen2-diagnostic/cache.jsonl \
-            --grid=full \
-            --short-borrow-bps-day=0 \
-            --out=data/gen2-diagnostic/selection.json | tee data/gen2-diagnostic/tune.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: gen2-partial-technical-tune-${{ github.run_id }}
-          path: data/gen2-diagnostic/
-          retention-days: 30
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
