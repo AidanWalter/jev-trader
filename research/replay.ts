@@ -116,6 +116,8 @@ export interface ReplayOptions {
   endIndex?: number;
   /** Ask the evaluator every N bars; the current position persists between decisions. */
   decisionEveryBars?: number;
+  /** For stocks, refuse a next-bar fill when the timestamp gap exceeds this multiple of the normal bar interval. */
+  maxExecutionGapMultiple?: number;
 }
 
 export async function replayBars(input: MarketBar[], options: ReplayOptions): Promise<ReplayResult> {
@@ -130,6 +132,10 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
   const start = Math.max(features.minHistoryBars, options.startIndex ?? features.minHistoryBars);
   const end = Math.min(bars.length - 2, options.endIndex ?? bars.length - 2);
   const decisionEveryBars = Math.max(1, Math.floor(options.decisionEveryBars ?? 1));
+  const baseIntervalMs = median(
+    bars.slice(1).map((b, i) => b.ts - bars[i]!.ts).filter((x) => x > 0)
+  );
+  const maxExecutionGapMultiple = options.maxExecutionGapMultiple ?? (bars[0]!.kind === "stock" ? 2 : Infinity);
   if (start > end) throw new Error("not enough bars after feature warmup");
 
   let cash = execution.initialCash;
@@ -179,7 +185,12 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     });
     let fill: FillRecord | null = null;
 
-    if (action.kind === "target" && next.open > 0) {
+    const executionGapOk =
+      !Number.isFinite(maxExecutionGapMultiple) ||
+      !baseIntervalMs ||
+      next.ts - bar.ts <= baseIntervalMs * maxExecutionGapMultiple;
+
+    if (action.kind === "target" && next.open > 0 && executionGapOk) {
       let target = clamp(action.targetExposure, -execution.maxGrossExposure, execution.maxGrossExposure);
       if (!execution.allowShort) target = Math.max(0, target);
 
