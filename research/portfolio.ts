@@ -142,7 +142,10 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         const currentExposure = q * asset.bars[i]!.close / portfolioEquity;
         const action = choosePolicyAction(signal, currentExposure, policy);
         const target = action.kind === "target" ? action.targetExposure : currentExposure;
-        candidates.push({ symbol: asset.spec.symbol, target, score: Math.abs(action.score) });
+        // A policy hold means preserve the position. Give existing exposure enough ranking weight that
+        // top-N selection does not silently liquidate it just because no new action was requested.
+        const score = action.kind === "hold" ? Math.max(Math.abs(currentExposure), Math.abs(action.score)) : Math.abs(action.score);
+        candidates.push({ symbol: asset.spec.symbol, target, score });
       }
 
       candidates.sort((a, b) => b.score - a.score);
