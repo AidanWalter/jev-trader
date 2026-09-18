@@ -13,7 +13,7 @@ permissions:
 jobs:
   pilot:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
@@ -29,12 +29,12 @@ jobs:
       - name: Download exact generation-two probe artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: generation2-jev-probe-35389140482
+          pattern: generation2-jev-probe-35390262714
           path: data/g2
           merge-multiple: true
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: 35389140482
+          run-id: 35390262714
       - name: Verify exact probe experiment and restore cache
         run: |
           test -s data/g2/universe/universe.json
@@ -42,7 +42,7 @@ jobs:
           test -s data/g2/portfolio-probe-summary.json
           jq -e '
             .horizons == [8,12] and
-            .profiles == ["technical","path"] and
+            .profiles == ["technical","path","cross","full"] and
             .decisionEveryBars == 8 and
             .symbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
             .alignedBars == 23400 and
@@ -54,15 +54,15 @@ jobs:
           bun run research/portfolio-pilot.ts data/g2/universe/universe.json \
             --model=jev \
             --require-complete-grid=true \
-            --concurrency=16 \
+            --concurrency=4 \
             --horizons=8,12 \
-            --profiles=technical,path \
+            --profiles=technical,path,cross,full \
             --decision-every=8 \
-            --top-n=3 \
+            --top-n=2 \
             --max-gross=1 \
-            --max-asset=0.35 \
+            --max-asset=0.5 \
             --allow-short=false \
-            --max-new-evals=30000 \
+            --max-new-evals=60000 \
             --cache=data/g2/portfolio-pilot-cache.jsonl \
             --out=data/g2/portfolio-pilot-summary.json
       - name: Tune coarse shared-bankroll apparatus
@@ -70,7 +70,7 @@ jobs:
           bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
             --pilot=data/g2/portfolio-pilot-summary.json \
             --cache=data/g2/portfolio-pilot-cache.jsonl \
-            --grid=fast \
+            --grid=full \
             --out=data/g2/portfolio-apparatus-selection.json
       - name: Freeze only qualified generation-two apparatus
         run: |
