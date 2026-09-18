@@ -47,7 +47,7 @@ interface FreezeRecord {
 }
 
 interface PaperState {
-  version: "frozen-binance-portfolio-paper-v1";
+  version: "frozen-binance-portfolio-paper-v2";
   freezeSha256: string;
   evaluatorNamespace: string;
   symbols: string[];
@@ -56,6 +56,7 @@ interface PaperState {
   quantities: Record<string, number>;
   fees: number;
   borrowCost: number;
+  fundingNet: number;
   lastOpenTs: number;
   pendingTargets: Record<string, number> | null;
   lastDecisionTs: number | null;
@@ -75,11 +76,11 @@ const freezeBytes = readFileSync(freezePath);
 const freeze = JSON.parse(freezeBytes.toString("utf8")) as FreezeRecord;
 if (freeze.version !== "portfolio-apparatus-freeze-v1") throw new Error("unsupported freeze version");
 if (!freeze.universe.symbols.length) throw new Error("frozen universe is empty");
-for (const symbol of freeze.universe.symbols) {
-  if (freeze.universe.kinds[symbol] !== "spot") {
-    throw new Error("frozen Binance portfolio paper runner currently supports spot datasets only");
-  }
+const kinds = [...new Set(freeze.universe.symbols.map((symbol) => freeze.universe.kinds[symbol]))];
+if (kinds.length !== 1 || (kinds[0] !== "spot" && kinds[0] !== "perp")) {
+  throw new Error("frozen Binance portfolio paper runner requires a homogeneous spot or perpetual universe");
 }
+const marketKind = kinds[0] as "spot" | "perp";
 
 const freezeHasher = new Bun.CryptoHasher("sha256");
 freezeHasher.update(freezeBytes);
@@ -136,7 +137,7 @@ function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const state = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
   if (
-    state.version !== "frozen-binance-portfolio-paper-v1" ||
+    state.version !== "frozen-binance-portfolio-paper-v2" ||
     state.freezeSha256 !== freezeSha256 ||
     state.evaluatorNamespace !== freeze.evaluator.namespace ||
     state.interval !== interval ||
@@ -147,8 +148,27 @@ function loadState(): PaperState | null {
 
 type FetchedBars = { symbol: string; closed: MarketBar[]; current: MarketBar };
 
+async function fetchFundingHistory(symbol: string, startTime: number) {
+  if (marketKind !== "perp") return [] as { ts: number; rateBps: number }[];
+  const url = new URL("https://fapi.binance.com/fapi/v1/fundingRate");
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("startTime", String(startTime));
+  url.searchParams.set("limit", "1000");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(symbol + " Binance funding HTTP " + res.status + ": " + (await res.text()).slice(0, 200));
+  const rows = await res.json() as { fundingTime: number; fundingRate: string }[];
+  return rows
+    .map((r) => ({ ts: Number(r.fundingTime), rateBps: Number(r.fundingRate) * 10_000 }))
+    .filter((r) => Number.isFinite(r.ts) && Number.isFinite(r.rateBps))
+    .sort((a, b) => a.ts - b.ts);
+}
+
 async function fetchSymbolBars(symbol: string, limit = 250): Promise<FetchedBars> {
-  const url = new URL("https://data-api.binance.vision/api/v3/klines");
+  const base =
+    marketKind === "perp"
+      ? "https://fapi.binance.com/fapi/v1/klines"
+      : "https://data-api.binance.vision/api/v3/klines";
+  const url = new URL(base);
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("interval", interval);
   url.searchParams.set("limit", String(limit));
@@ -161,16 +181,26 @@ async function fetchSymbolBars(symbol: string, limit = 250): Promise<FetchedBars
     bar: {
       ts: Number(r[0]),
       symbol,
-      kind: "spot",
+      kind: marketKind,
       open: Number(r[1]),
       high: Number(r[2]),
       low: Number(r[3]),
       close: Number(r[4]),
       volume: Number(r[5]),
       spreadBps: spreadFor(symbol),
+      fundingBps: 0,
     },
     closeTime: Number(r[6]),
   }));
+
+  if (marketKind === "perp") {
+    const funding = await fetchFundingHistory(symbol, parsed[0]!.bar.ts);
+    for (const event of funding) {
+      const target = parsed.find((x) => x.bar.ts >= event.ts);
+      if (target) target.bar.fundingBps = (target.bar.fundingBps ?? 0) + event.rateBps;
+    }
+  }
+
   const currentRow = parsed.at(-1)!;
   if (currentRow.closeTime <= now) throw new Error(symbol + " latest Binance kline is unexpectedly already closed");
   return {
@@ -215,34 +245,72 @@ function exposureMap(state: PaperState, prices: Record<string, number>) {
   return out;
 }
 
-function accrueCarryingCosts(state: PaperState, currents: Record<string, MarketBar>) {
-  if (state.lastOpenTs <= 0) return 0;
+function accrueCarryingCosts(
+  state: PaperState,
+  closedBySymbol: Map<string, MarketBar[]>,
+  currents: Record<string, MarketBar>,
+) {
+  if (state.lastOpenTs <= 0) return { borrow: 0, funding: 0 };
   const ts = currents[state.symbols[0]!]!.ts;
-  if (ts <= state.lastOpenTs) return 0;
-  const days = (ts - state.lastOpenTs) / 86_400_000;
-  let total = 0;
-  for (const symbol of state.symbols) {
-    const q = state.quantities[symbol] ?? 0;
-    if (q >= 0) continue;
-    const price = currents[symbol]!.open;
-    const cost = Math.abs(q * price) * freeze.execution.shortBorrowBpsPerDay / 10_000 * days;
-    if (cost <= 0) continue;
-    state.cash -= cost;
-    state.borrowCost += cost;
-    total += cost;
-    writeEvent({
-      type: "borrow-cost",
-      at: Date.now(),
-      barTs: ts,
-      symbol,
-      quantity: q,
-      price,
-      days,
-      cost,
-      cumulativeBorrowCost: state.borrowCost,
-    });
+  if (ts <= state.lastOpenTs) return { borrow: 0, funding: 0 };
+
+  let borrow = 0;
+  let funding = 0;
+
+  if (marketKind === "spot") {
+    const days = (ts - state.lastOpenTs) / 86_400_000;
+    for (const symbol of state.symbols) {
+      const q = state.quantities[symbol] ?? 0;
+      if (q >= 0) continue;
+      const price = currents[symbol]!.open;
+      const cost = Math.abs(q * price) * freeze.execution.shortBorrowBpsPerDay / 10_000 * days;
+      if (cost <= 0) continue;
+      state.cash -= cost;
+      state.borrowCost += cost;
+      borrow += cost;
+      writeEvent({
+        type: "borrow-cost",
+        at: Date.now(),
+        barTs: ts,
+        symbol,
+        quantity: q,
+        price,
+        days,
+        cost,
+        cumulativeBorrowCost: state.borrowCost,
+      });
+    }
+  } else {
+    for (const symbol of state.symbols) {
+      const q = state.quantities[symbol] ?? 0;
+      if (q === 0) continue;
+      const bars = [
+        ...closedBySymbol.get(symbol)!.filter((b) => b.ts > state.lastOpenTs && b.ts < ts),
+        currents[symbol]!,
+      ];
+      for (const bar of bars) {
+        const rate = bar.fundingBps ?? 0;
+        if (!rate) continue;
+        const pnl = -q * bar.open * rate / 10_000;
+        state.cash += pnl;
+        state.fundingNet += pnl;
+        funding += pnl;
+        writeEvent({
+          type: "funding",
+          at: Date.now(),
+          barTs: bar.ts,
+          symbol,
+          quantity: q,
+          price: bar.open,
+          fundingBps: rate,
+          pnl,
+          cumulativeFundingNet: state.fundingNet,
+        });
+      }
+    }
   }
-  return total;
+
+  return { borrow, funding };
 }
 
 function executePending(state: PaperState, currents: Record<string, MarketBar>) {
@@ -371,7 +439,7 @@ while (cycles === 0 || cycle < cycles) {
 
     if (!state) {
       state = {
-        version: "frozen-binance-portfolio-paper-v1",
+        version: "frozen-binance-portfolio-paper-v2",
         freezeSha256,
         evaluatorNamespace: freeze.evaluator.namespace,
         symbols: [...freeze.universe.symbols],
@@ -380,6 +448,7 @@ while (cycles === 0 || cycle < cycles) {
         quantities: Object.fromEntries(freeze.universe.symbols.map((s) => [s, 0])),
         fees: 0,
         borrowCost: 0,
+        fundingNet: 0,
         lastOpenTs: currentTs,
         pendingTargets: null,
         lastDecisionTs: null,
@@ -392,6 +461,7 @@ while (cycles === 0 || cycle < cycles) {
         at: Date.now(),
         barTs: currentTs,
         symbols: state.symbols,
+        marketKind,
         equity: markEquity(state, openPrices),
         freezeSha256,
         note: "Waiting for the next clean synchronized bar boundary before the first frozen portfolio decision.",
@@ -402,8 +472,27 @@ while (cycles === 0 || cycle < cycles) {
         " · equity $" + markEquity(state, openPrices).toFixed(2)
       );
     } else if (currentTs > state.lastOpenTs) {
-      const borrow = accrueCarryingCosts(state, currents);
-      const fills = executePending(state, currents);
+      const gapBars = Math.max(1, Math.round((currentTs - state.lastOpenTs) / freeze.universe.intervalMs));
+      const carrying = accrueCarryingCosts(state, closedBySymbol, currents);
+
+      let fills: any[] = [];
+      if (gapBars > 1) {
+        if (state.pendingTargets) {
+          writeEvent({
+            type: "stale-target-cancelled",
+            at: Date.now(),
+            priorBarTs: state.lastOpenTs,
+            currentBarTs: currentTs,
+            gapBars,
+            pendingTargets: state.pendingTargets,
+          });
+        }
+        state.pendingTargets = null;
+        state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
+      } else {
+        fills = executePending(state, currents);
+      }
+
       state.lastOpenTs = currentTs;
       state.barsSinceDecision++;
       let targets: Record<string, number> | null = null;
@@ -417,11 +506,14 @@ while (cycles === 0 || cycle < cycles) {
       const gross = Object.values(exposures).reduce((sum, x) => sum + Math.abs(x), 0);
       console.log(
         new Date(currentTs).toISOString() +
+        " · " + marketKind +
         " · equity $" + markEquity(state, openPrices).toFixed(2) +
         " · gross " + gross.toFixed(3) +
+        (gapBars > 1 ? " · resumed after " + gapBars + "-bar gap" : "") +
         (targets ? " · decision" : " · no decision this bar") +
         (fills.length ? " · fills " + fills.length : "") +
-        (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
+        (carrying.borrow > 0 ? " · borrow $" + carrying.borrow.toFixed(6) : "") +
+        (carrying.funding !== 0 ? " · funding $" + carrying.funding.toFixed(6) : "")
       );
     }
   } catch (e) {
@@ -442,6 +534,7 @@ if (state) {
     " · new " + evaluator.newEvaluations +
     " · fresh tokens " + evaluator.newInputTokens +
     " · fees $" + state.fees.toFixed(4) +
-    " · borrow $" + state.borrowCost.toFixed(6)
+    " · borrow $" + state.borrowCost.toFixed(6) +
+    " · funding $" + state.fundingNet.toFixed(6)
   );
 }
