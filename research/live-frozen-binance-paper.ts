@@ -38,7 +38,7 @@ interface FreezeRecord {
 }
 
 interface PaperState {
-  version: "frozen-binance-paper-v2";
+  version: "frozen-binance-paper-v3";
   freezeSha256: string;
   evaluatorNamespace: string;
   symbol: string;
@@ -48,7 +48,6 @@ interface PaperState {
   fees: number;
   borrowCost: number;
   lastOpenTs: number;
-  pendingTarget: number | null;
   lastDecisionTs: number | null;
   barsSinceDecision: number;
   startedAt: number;
@@ -115,7 +114,7 @@ function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const s = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
   if (
-    s.version !== "frozen-binance-paper-v2" ||
+    s.version !== "frozen-binance-paper-v3" ||
     s.freezeSha256 !== freezeSha256 ||
     s.evaluatorNamespace !== freeze.evaluator.namespace ||
     s.symbol !== symbol ||
@@ -187,20 +186,16 @@ function accrueCarryingCosts(state: PaperState, current: MarketBar) {
   return cost;
 }
 
-function executePending(state: PaperState, current: MarketBar) {
-  if (state.pendingTarget === null) return null;
+function executeTarget(state: PaperState, current: MarketBar, requestedTarget: number) {
   const beforeEquity = equity(state, current.open);
   if (!(beforeEquity > 0)) throw new Error("paper equity is non-positive");
 
-  let target = Math.max(-freeze.execution.maxGrossExposure, Math.min(freeze.execution.maxGrossExposure, state.pendingTarget));
+  let target = Math.max(-freeze.execution.maxGrossExposure, Math.min(freeze.execution.maxGrossExposure, requestedTarget));
   if (!freeze.execution.allowShort) target = Math.max(0, target);
   const targetQty = beforeEquity * target / current.open;
   const delta = targetQty - state.quantity;
   const estimatedNotional = Math.abs(delta * current.open);
-  if (estimatedNotional < freeze.execution.minTradeNotional) {
-    state.pendingTarget = null;
-    return null;
-  }
+  if (estimatedNotional < freeze.execution.minTradeNotional) return null;
 
   const side = delta > 0 ? "buy" : "sell";
   const frictionBps = freeze.execution.spreadBps / 2 + freeze.execution.slippageBps;
@@ -213,7 +208,8 @@ function executePending(state: PaperState, current: MarketBar) {
   const fill = {
     type: "fill",
     at: Date.now(),
-    barTs: current.ts,
+    decisionTs: state.lastDecisionTs,
+    executionTs: current.ts,
     side,
     quantity: Math.abs(delta),
     price,
@@ -222,7 +218,6 @@ function executePending(state: PaperState, current: MarketBar) {
     targetExposure: target,
     equityAfter: equity(state, current.open),
   };
-  state.pendingTarget = null;
   writeEvent(fill);
   return fill;
 }
@@ -240,7 +235,6 @@ async function decide(state: PaperState, closed: MarketBar[]) {
 
   let target = action.kind === "target" ? action.targetExposure : exposure(state, closed[i]!.close);
   if (!freeze.execution.allowShort) target = Math.max(0, target);
-  state.pendingTarget = target;
   state.lastDecisionTs = closed[i]!.ts;
   state.barsSinceDecision = 0;
   writeEvent({
@@ -252,7 +246,7 @@ async function decide(state: PaperState, closed: MarketBar[]) {
     exposure: exposure(state, closed[i]!.close),
     signal,
     action,
-    pendingTarget: target,
+    target,
     freezeSha256,
   });
   return { action, target };
@@ -266,7 +260,7 @@ while (cycles === 0 || cycle < cycles) {
     const { closed, current } = await fetchBars();
     if (!state) {
       state = {
-        version: "frozen-binance-paper-v2",
+        version: "frozen-binance-paper-v3",
         freezeSha256,
         evaluatorNamespace: freeze.evaluator.namespace,
         symbol,
@@ -276,7 +270,6 @@ while (cycles === 0 || cycle < cycles) {
         fees: 0,
         borrowCost: 0,
         lastOpenTs: current.ts,
-        pendingTarget: null,
         lastDecisionTs: null,
         barsSinceDecision: Math.max(0, freeze.cadence.decisionEveryBars - 1),
         startedAt: Date.now(),
@@ -293,18 +286,36 @@ while (cycles === 0 || cycle < cycles) {
       saveState(state);
       console.log("initialized frozen " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2));
     } else if (current.ts > state.lastOpenTs) {
+      const gapBars = intervalMs > 0 ? Math.max(1, Math.round((current.ts - state.lastOpenTs) / intervalMs)) : 1;
       const borrow = accrueCarryingCosts(state, current);
-      const fill = executePending(state, current);
       state.lastOpenTs = current.ts;
-      state.barsSinceDecision++;
+
       let d: { action: unknown; target: number } | null = null;
-      if (state.barsSinceDecision >= freeze.cadence.decisionEveryBars) d = await decide(state, closed);
+      let fill: ReturnType<typeof executeTarget> = null;
+      if (gapBars > 1) {
+        state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
+        writeEvent({
+          type: "resume-gap",
+          at: Date.now(),
+          currentBarTs: current.ts,
+          gapBars,
+          note: "No retroactive fill or decision was simulated after a missed bar boundary.",
+        });
+      } else {
+        state.barsSinceDecision++;
+        if (state.barsSinceDecision >= freeze.cadence.decisionEveryBars) {
+          d = await decide(state, closed);
+          fill = executeTarget(state, current, d.target);
+        }
+      }
+
       saveState(state);
       console.log(
         new Date(current.ts).toISOString() +
         " · equity $" + equity(state, current.open).toFixed(2) +
         " · exposure " + exposure(state, current.open).toFixed(3) +
-        (d ? " · next target " + d.target.toFixed(3) : " · no decision this bar") +
+        (gapBars > 1 ? " · resumed after " + gapBars + "-bar gap" : "") +
+        (d ? " · target " + d.target.toFixed(3) : " · no decision this bar") +
         (fill ? " · filled " + fill.side + " $" + fill.notional.toFixed(2) : "") +
         (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
       );
