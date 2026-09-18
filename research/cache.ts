@@ -76,6 +76,7 @@ export class JsonlSignalCache {
 export class CachedEvaluator implements SignalEvaluator {
   readonly name: string;
   newEvaluations = 0;
+  newInputTokens = 0;
 
   constructor(
     private inner: SignalEvaluator,
@@ -92,6 +93,8 @@ export class CachedEvaluator implements SignalEvaluator {
       throw new Error(`new-evaluation limit reached (${this.maxNewEvaluations}); increase --max-new-evals deliberately`);
     }
     this.newEvaluations++;
-    return this.cache.put(this.inner.name, state, await this.inner.evaluate(state));
+    const signal = await this.inner.evaluate(state);
+    this.newInputTokens += signal.inputTokens;
+    return this.cache.put(this.inner.name, state, signal);
   }
 }
