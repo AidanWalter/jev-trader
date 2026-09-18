@@ -320,7 +320,7 @@ while (cycles === 0 || cycle < cycles) {
         new Date(current.ts).toISOString() +
         " · equity $" + equity(state, current.open).toFixed(2) +
         " · exposure " + exposure(state, current.open).toFixed(3) +
-        (gapBars > 1 ? " · boundary reset after " + boundary.gapBars + "-bar gap" : "") +
+        (boundary.gapBars > 1 ? " · boundary reset after " + boundary.boundary.gapBars + "-bar gap" : "") +
         (d ? " · target " + d.target.toFixed(3) : " · no decision this bar") +
         (fill ? " · filled " + fill.side + " $" + fill.notional.toFixed(2) : "") +
         (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
