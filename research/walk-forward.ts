@@ -59,19 +59,23 @@ const edges = [0.06, 0.10, 0.14, 0.18];
 const confidences = [0.44, 0.50, 0.56, 0.62];
 const adverse = [0.55, 0.65, 0.75];
 const exposures = [0.25, 0.50, 0.75, 1.00];
+const costMultiples = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 const policyGrid: PolicyConfig[] = [];
 for (const minDirectionalEdge of edges) {
   for (const minDirectionalConfidence of confidences) {
     for (const maxAdverseSelection of adverse) {
       for (const maxTargetExposure of exposures) {
-        policyGrid.push({
-          ...defaultPolicyConfig,
-          minDirectionalEdge,
-          minDirectionalConfidence,
-          maxAdverseSelection,
-          maxTargetExposure,
-        });
+        for (const minExpectedMoveCostMultiple of costMultiples) {
+          policyGrid.push({
+            ...defaultPolicyConfig,
+            minDirectionalEdge,
+            minDirectionalConfidence,
+            maxAdverseSelection,
+            maxTargetExposure,
+            minExpectedMoveCostMultiple,
+          });
+        }
       }
     }
   }
@@ -113,7 +117,8 @@ for (const fold of folds) {
     " · edge " + best!.policy.minDirectionalEdge +
     " conf " + best!.policy.minDirectionalConfidence +
     " adverse " + best!.policy.maxAdverseSelection +
-    " exposure " + best!.policy.maxTargetExposure
+    " exposure " + best!.policy.maxTargetExposure +
+    " costx " + best!.policy.minExpectedMoveCostMultiple
   );
 }
 
