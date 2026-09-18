@@ -88,17 +88,20 @@ try {
     maxFreshInputTokens: 3_600,
     reserveInputTokensPerEvaluation: 1_800,
   });
-  await Promise.all([
+  const tokenResults = await Promise.allSettled([
     tokenBudgeted.evaluate(state(10_000)),
     tokenBudgeted.evaluate(state(11_000)),
+    tokenBudgeted.evaluate(state(12_000)),
   ]);
-  let tokenRejected = false;
-  try {
-    await tokenBudgeted.evaluate(state(12_000));
-  } catch (e) {
-    tokenRejected = String((e as Error).message).includes("fresh-input-token budget would be exceeded");
-  }
-  check("pre-call token reservation blocks spend before a third call", tokenRejected && tokenInner.calls === 2);
+  const tokenFulfilled = tokenResults.filter((x) => x.status === "fulfilled").length;
+  const tokenRejected = tokenResults.filter((x) =>
+    x.status === "rejected" &&
+    String((x as PromiseRejectedResult).reason).includes("fresh-input-token budget would be exceeded")
+  ).length;
+  check(
+    "pre-call token reservations block a third concurrent spend",
+    tokenFulfilled === 2 && tokenRejected === 1 && tokenInner.calls === 2,
+  );
 
   console.log(JSON.stringify({
     innerCalls: inner.calls,
