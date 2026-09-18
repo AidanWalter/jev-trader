@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
+import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
@@ -65,6 +66,7 @@ const bars = extname(file).toLowerCase() === ".jsonl"
       defaultSpreadBps: record.execution.spreadBps,
     });
 if (bars.length !== record.dataset.bars) throw new Error("dataset bar count differs from frozen apparatus");
+assertResearchDataQuality(bars);
 const split = chronologicalSplit(bars);
 const ranges = chronologicalRanges(bars);
 if (
