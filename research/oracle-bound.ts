@@ -101,7 +101,7 @@ for (const horizonBars of horizons) {
   console.log("PERFECT-FORESIGHT DIAGNOSTIC, NOT A TRADABLE MODEL");
   console.log(symbol + " · horizon " + horizonBars + " bars");
   console.log("P&L $" + m.pnl.toFixed(2) + " · return " + m.returnPct.toFixed(2) + "% · buy/hold " + m.buyHoldReturnPct.toFixed(2) + "%");
-  console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · turnover " + m.turnover.toFixed(1) + "x · fees $" + m.fees.toFixed(4));
+  console.log("max DD " + m.maxDrawdownPct.toFixed(2) + "% · turnover " + m.turnover.toFixed(1) + "x · fees $" + m.fees.toFixed(4) + " · funding net $" + m.fundingNet.toFixed(4));
   console.log("orders " + m.orders + " · round trips " + m.roundTrips + " · wins " + m.wins + " · losses " + m.losses);
   console.log("");
 }
