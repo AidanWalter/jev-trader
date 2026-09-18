@@ -1,0 +1,51 @@
+name: gen2-perp-sizing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gen2-perp-sizing.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download generation-two perpetual universe
+        run: |
+          bun run scripts/download-binance-perp-universe.ts \
+            --symbols=BTCUSDT,ETHUSDT,SOLUSDT \
+            --interval=15m \
+            --start=2025-01-01 \
+            --end=2025-05-01 \
+            --out-dir=data/gen2-perp/universe \
+            --manifest=data/gen2-perp/universe/universe.json
+      - name: Count exact development states without Jev
+        run: |
+          bun run research/portfolio-probe.ts data/gen2-perp/universe/universe.json \
+            --model=mock \
+            --horizons=12,24 \
+            --profiles=technical,path,full \
+            --decision-every=4 \
+            --sample-per-cell=1 \
+            --max-new-evals=16 \
+            --fee-bps=4 \
+            --slippage-bps=1 \
+            --cache=data/gen2-perp/mock-cache.jsonl \
+            --out=data/gen2-perp/sizing.json
+          jq '{symbols, alignedBars, trainBars, validationBars, sealedTestBars, cells: [.cells[] | {horizonBars, profile, totalDevelopmentAssetStates, missingBefore}]}' data/gen2-perp/sizing.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen2-perp-sizing-${{ github.run_id }}
+          path: data/gen2-perp/
+          retention-days: 30
