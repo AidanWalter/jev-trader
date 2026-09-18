@@ -33,5 +33,7 @@ jobs:
         run: bun run research:check-stock-session
       - name: Perpetual funding regression
         run: bun run research:check-perp-funding
+      - name: Cross-sectional feature regression
+        run: bun run research:check-feature-context
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
