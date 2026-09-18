@@ -8,6 +8,8 @@ on:
       - .github/workflows/research-realdata.yml
       - research/**
       - scripts/download-binance-klines.ts
+      - scripts/download-binance-perp-universe.ts
+      - scripts/download-yahoo-chart.ts
   workflow_dispatch:
 
 permissions:
@@ -218,11 +220,11 @@ jobs:
             --end=2025-02-01 \
             --out-dir=data/market/perp-universe \
             --manifest=data/market/perp-universe/universe.json
-      - name: Verify funding observations exist
+      - name: Verify funding data
         run: |
           test -s data/market/perp-universe/universe.json
           jq -e '[.assets[].fundingObservations] | add > 0' data/market/perp-universe/universe.json >/dev/null
-          awk -F, 'NR>1 && $7 != 0 { found=1; exit } END { exit found ? 0 : 1 }' data/market/perp-universe/*-perp.csv
+          bun -e 'import { readFileSync, readdirSync } from "node:fs"; const fs=readdirSync("data/market/perp-universe").filter(x=>x.endsWith(".csv")); let nonzero=0; for(const f of fs){ for(const line of readFileSync("data/market/perp-universe/"+f,"utf8").split("\n").slice(1)){ const x=Number(line.split(",").at(-1)); if(Number.isFinite(x)&&x!==0) nonzero++; } } if(!nonzero) throw new Error("no nonzero funding bars"); console.log("nonzero funding bars",nonzero);'
       - name: Replay mock perpetual portfolio with real funding
         run: |
           set -o pipefail
