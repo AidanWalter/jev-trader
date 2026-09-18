@@ -80,7 +80,7 @@ jobs:
             --state=data/mock-frozen-paper-state.json \
             --events=data/mock-frozen-paper-events.jsonl
           test -s data/mock-frozen-paper-state.json
-          grep -q '"version": "frozen-binance-paper-v2"' data/mock-frozen-paper-state.json
+          grep -q '"version": "frozen-binance-paper-v3"' data/mock-frozen-paper-state.json
       - name: Momentum baseline
         run: set -o pipefail; bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
       - name: Random baseline
@@ -183,7 +183,7 @@ jobs:
             --events=data/mock-portfolio-live-events.jsonl
           test -s data/mock-portfolio-live-state.json
           test -s data/mock-portfolio-live-events.jsonl
-          grep -q '"version": "frozen-binance-portfolio-paper-v2"' data/mock-portfolio-live-state.json
+          grep -q '"version": "frozen-binance-portfolio-paper-v3"' data/mock-portfolio-live-state.json
       - name: Momentum portfolio
         run: set -o pipefail; bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
       - name: Random portfolio
@@ -281,7 +281,7 @@ jobs:
             test "$STATUS" -eq 0
             test -s data/mock-perp-live-state.json
             test -s data/mock-perp-live-events.jsonl
-            grep -q '"version": "frozen-binance-portfolio-paper-v2"' data/mock-perp-live-state.json
+            grep -q '"version": "frozen-binance-portfolio-paper-v3"' data/mock-perp-live-state.json
             grep -q '"marketKind":"perp"' data/mock-perp-live-events.jsonl
           fi
       - uses: actions/upload-artifact@v4
@@ -393,7 +393,7 @@ jobs:
         run: |
           test -s data/paper-state.json
           test -s data/paper-events.jsonl
-          grep -q '"version": "binance-paper-v2"' data/paper-state.json
+          grep -q '"version": "binance-paper-v3"' data/paper-state.json
       - uses: actions/upload-artifact@v4
         with:
           name: forward-paper-smoke
