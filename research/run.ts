@@ -42,6 +42,7 @@ const policy: Partial<PolicyConfig> = {
   maxAdverseSelection: Number(flag("max-adverse", "0.72")),
   maxTargetExposure: Number(flag("max-exposure", "1")),
   minExposureChange: Number(flag("min-change", "0.12")),
+  minExpectedMoveCostMultiple: Number(flag("cost-multiple", "1.25")),
 };
 
 const bars = extname(file).toLowerCase() === ".jsonl"
