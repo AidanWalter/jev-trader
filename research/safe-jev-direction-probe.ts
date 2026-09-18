@@ -110,7 +110,7 @@ const raw = createReplayEvaluator("jev-direction", profile);
 const ledger = new SpendBudgetLedger({
   maxRequests,
   maxInputTokens,
-  maxUsd: maxInputTokens / 1_000_000 * usdPerMTok,
+  maxUsd,
   usdPerMTok,
   reserveTokensPerRequest: reserveInputTokensPerRequest,
 });
