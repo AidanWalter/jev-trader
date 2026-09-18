@@ -1,95 +1,15 @@
-name: gen2-perp-jev-resume
+name: gen2-perp-jev-resume-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  pilot:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: test -n "$TYPESAFE_AI_API_KEY"
-      - name: Download generation-two partial paid artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: gen2-perp-jev-pilot-35388518829
-          path: resume
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35388518829
-      - name: Restore exact universe and partial cache
-        run: |
-          test -s resume/universe/universe.json
-          test -s resume/jev-cache.jsonl
-          mkdir -p data/gen2-perp
-          cp -R resume/universe data/gen2-perp/universe
-          cp resume/jev-cache.jsonl data/gen2-perp/jev-cache.jsonl
-          echo "Restored $(wc -l < data/gen2-perp/jev-cache.jsonl) cached Jev answers"
-          test "$(wc -l < data/gen2-perp/jev-cache.jsonl)" -eq 13829
-      - name: Complete generation-two Jev pilot
-        run: |
-          bun run research/portfolio-pilot.ts data/gen2-perp/universe/universe.json \
-            --model=jev \
-            --require-complete-grid=true \
-            --concurrency=4 \
-            --horizons=12,24 \
-            --profiles=technical,path,full \
-            --decision-every=4 \
-            --top-n=3 \
-            --max-gross=1 \
-            --max-asset=0.5 \
-            --allow-short=true \
-            --fee-bps=4 \
-            --slippage-bps=1 \
-            --spread-bps=4 \
-            --max-new-evals=28000 \
-            --cache=data/gen2-perp/jev-cache.jsonl \
-            --out=data/gen2-perp/pilot.json
-      - name: Tune with hardened validation and cadence refinement
-        run: |
-          bun run research/tune-portfolio-apparatus.ts data/gen2-perp/universe/universe.json \
-            --pilot=data/gen2-perp/pilot.json \
-            --cache=data/gen2-perp/jev-cache.jsonl \
-            --grid=full \
-            --short-borrow-bps-day=0 \
-            --out=data/gen2-perp/selection.json
-      - name: Freeze only if hardened qualification passes
-        run: |
-          bun run research/freeze-portfolio.ts data/gen2-perp/universe/universe.json \
-            --selection=data/gen2-perp/selection.json \
-            --short-borrow-bps-day=0 \
-            --out=data/gen2-perp/freeze.json
-      - name: Zero-spend new sealed-test preflight
-        if: ${{ success() }}
-        run: |
-          bun run research/portfolio-sealed-preflight.ts data/gen2-perp/freeze.json \
-            --manifest=data/gen2-perp/universe/universe.json \
-            --cache=data/gen2-perp/jev-cache.jsonl | tee data/gen2-perp/sealed-preflight.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: gen2-perp-jev-resume-${{ github.run_id }}
-          path: |
-            data/gen2-perp/universe/
-            data/gen2-perp/jev-cache.jsonl
-            data/gen2-perp/pilot.json
-            data/gen2-perp/selection.json
-            data/gen2-perp/freeze.json
-            data/gen2-perp/sealed-preflight.txt
-          retention-days: 45
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
