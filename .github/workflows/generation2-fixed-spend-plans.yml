@@ -1,0 +1,50 @@
+name: generation2-fixed-spend-plans
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/generation2-fixed-spend-plans.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Reuse fixed long-window dataset
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/g2
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Exact request plans
+        run: |
+          for cadence in 24 32 48; do
+            for tokens in 600 900 1200; do
+              echo "=== cadence=$cadence assumed_tokens=$tokens ==="
+              bun run research/jev-spend-plan.ts data/g2/universe/universe.json \
+                --horizon=12 \
+                --decision-every="$cadence" \
+                --tokens-per-request="$tokens" \
+                --usd-per-mtok=0.042
+            done
+          done | tee data/g2/fixed-spend-plans.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generation2-fixed-spend-plans-${{ github.run_id }}
+          path: data/g2/fixed-spend-plans.txt
+          retention-days: 30
