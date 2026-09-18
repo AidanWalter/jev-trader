@@ -29,6 +29,7 @@ const maxRequests = Math.max(0, Number(flag("max-requests", String(sampleCount))
 const maxInputTokens = Math.max(0, Number(flag("max-input-tokens", "30000")));
 const reserveInputTokensPerRequest = Math.max(1, Number(flag("reserve-input-tokens", "2000")));
 const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
+const maxUsd = Math.max(0, Number(flag("max-usd", "0.0015")));
 const concurrency = Math.max(1, Number(flag("concurrency", "1")));
 const cachePath = flag("cache", "data/safe-jev-direction-probe-cache.jsonl")!;
 const outPath = flag("out", "data/safe-jev-direction-probe.json")!;
@@ -39,10 +40,13 @@ const spreadBps = Number(flag("spread-bps", "4"));
 if (sampleCount > maxRequests) {
   throw new Error("sample count exceeds the hard request cap");
 }
-if (maxRequests * reserveInputTokensPerRequest > maxInputTokens) {
+const dollarTokenCeiling = Math.floor(maxUsd / usdPerMTok * 1_000_000);
+const effectiveTokenCeiling = Math.min(maxInputTokens, dollarTokenCeiling);
+if (maxRequests * reserveInputTokensPerRequest > effectiveTokenCeiling) {
   throw new Error(
-    "requested batch cannot fit the token reservation cap: " +
-    maxRequests + " × " + reserveInputTokensPerRequest + " > " + maxInputTokens
+    "requested batch cannot fit the hard spend envelope: " +
+    maxRequests + " × " + reserveInputTokensPerRequest +
+    " reserved tokens > " + effectiveTokenCeiling + " effective token ceiling"
   );
 }
 
