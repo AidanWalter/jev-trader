@@ -1,100 +1,15 @@
-name: jev-portfolio-probe
+name: jev-portfolio-probe-disabled
 
 on:
   workflow_dispatch:
-    inputs:
-      symbols:
-        description: Comma-separated Binance spot symbols
-        required: true
-        default: "BTCUSDT,ETHUSDT,SOLUSDT"
-      interval:
-        description: Binance kline interval
-        required: true
-        default: "15m"
-      start:
-        description: Historical start date
-        required: true
-        default: "2025-01-01"
-      end:
-        description: Historical end date
-        required: true
-        default: "2025-02-01"
-      horizons:
-        description: Forecast horizons in bars
-        required: true
-        default: "6,12"
-      profiles:
-        description: Jev input profiles
-        required: true
-        default: "technical,path,cross,full"
-      decision_every:
-        description: Evaluate every N synchronized bars
-        required: true
-        default: "8"
-      concurrency:
-        description: Maximum concurrent Jev API calls
-        required: true
-        default: "4"
-      sample_per_cell:
-        description: Fresh Jev calls sampled per horizon/profile cell
-        required: true
-        default: "6"
-      max_new_evals:
-        description: Hard cap across the probe
-        required: true
-        default: "48"
 
 permissions:
   contents: read
 
 jobs:
-  probe:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: |
-          if [ -z "$TYPESAFE_AI_API_KEY" ]; then
-            echo "TYPESAFE_AI_API_KEY repository secret is not configured"
-            exit 1
-          fi
-      - name: Download exact public crypto universe
-        run: |
-          bun run scripts/download-binance-universe.ts \
-            --symbols="${{ inputs.symbols }}" \
-            --interval="${{ inputs.interval }}" \
-            --start="${{ inputs.start }}" \
-            --end="${{ inputs.end }}" \
-            --out-dir=data/market/universe \
-            --manifest=data/market/universe/universe.json
-      - name: Measure Jev portfolio tokens latency and projected spend
-        run: |
-          bun run research/portfolio-probe.ts data/market/universe/universe.json \
-            --model=jev \
-            --concurrency="${{ inputs.concurrency }}" \
-            --horizons="${{ inputs.horizons }}" \
-            --profiles="${{ inputs.profiles }}" \
-            --decision-every="${{ inputs.decision_every }}" \
-            --sample-per-cell="${{ inputs.sample_per_cell }}" \
-            --max-new-evals="${{ inputs.max_new_evals }}" \
-            --cache=data/portfolio-probe-cache.jsonl \
-            --out=data/portfolio-probe-summary.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jev-portfolio-probe-${{ github.run_id }}
-          path: |
-            data/market/universe/
-            data/portfolio-probe-cache.jsonl
-            data/portfolio-probe-summary.json
-          retention-days: 30
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
