@@ -34,6 +34,7 @@
     "research:paper": "bun run research/live-binance-paper.ts",
     "research:sealed-test": "bun run research/run-sealed-test.ts",
     "research:live-paper": "bun run research/live-binance-paper.ts",
-    "data:binance-universe": "bun run scripts/download-binance-universe.ts"
+    "data:binance-universe": "bun run scripts/download-binance-universe.ts",
+    "research:oracle": "bun run research/oracle-bound.ts"
   }
 }
