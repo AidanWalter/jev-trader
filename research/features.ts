@@ -5,6 +5,7 @@ export const defaultFeatureConfig: FeatureConfig = {
   minHistoryBars: 50,
   spreadBpsFallback: 5,
   directionThresholdSpreadMultiple: 1,
+  directionThresholdBpsFloor: 1,
   recentPoints: 24,
 };
 
@@ -66,7 +67,11 @@ export function buildFeatureState(
     horizonBars: config.horizonBars,
     price: cur.close,
     spreadBps,
-    directionThresholdBps: Number(Math.max(1, spreadBps * config.directionThresholdSpreadMultiple).toFixed(3)),
+    directionThresholdBps: Number(Math.max(
+      1,
+      config.directionThresholdBpsFloor,
+      spreadBps * config.directionThresholdSpreadMultiple,
+    ).toFixed(3)),
     returnsBps: {
       r1: Number(ret(bars, index, 1).toFixed(3)),
       r3: Number(ret(bars, index, 3).toFixed(3)),
