@@ -1,10 +1,7 @@
 name: gen2-perp-jev-pilot
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/gen2-perp-jev-pilot.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +9,7 @@ permissions:
 
 jobs:
   pilot:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
