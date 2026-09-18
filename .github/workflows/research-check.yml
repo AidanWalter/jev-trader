@@ -29,5 +29,7 @@ jobs:
         run: bun run research:check
       - name: Portfolio replay smoke test
         run: bun run research:check-portfolio
+      - name: Stock session execution regression
+        run: bun run research:check-stock-session
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
