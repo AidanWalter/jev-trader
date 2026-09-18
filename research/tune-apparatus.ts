@@ -69,6 +69,11 @@ const confidences = fast ? [0.48, 0.58] : [0.42, 0.48, 0.54, 0.60];
 const adverse = fast ? [0.65, 0.90] : [0.55, 0.65, 0.75, 0.90];
 const exposures = fast ? [0.50, 1.00] : [0.25, 0.50, 0.75, 1.00];
 const costMultiples = fast ? [0.5, 1.25] : [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
+const flatExits = fast ? [0.54, 0.64] : [0.50, 0.58, 0.66];
+const minChanges = fast ? [0.08, 0.18] : [0.05, 0.12, 0.20];
+const sizeThresholdSets: [number, number, number][] = fast
+  ? [[0.08, 0.20, 0.36], [0.12, 0.26, 0.44]]
+  : [[0.06, 0.16, 0.30], [0.10, 0.22, 0.38], [0.14, 0.28, 0.46]];
 
 function objective(m: ReplayMetrics) {
   const sharpe = m.sharpe ?? 0;
@@ -170,6 +175,40 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     }
   }
 
+  let refinedTrain = bestTrain!;
+  for (const flatExitProbability of flatExits) {
+    for (const minExposureChange of minChanges) {
+      for (const sizeScoreThresholds of sizeThresholdSets) {
+        const policy: PolicyConfig = {
+          ...bestTrain!.policy,
+          flatExitProbability,
+          minExposureChange,
+          sizeScoreThresholds,
+        };
+        const r = await replayBars(bars, {
+          evaluator,
+          policy,
+          features: {
+            horizonBars: cell.horizonBars,
+            directionThresholdBpsFloor: pilot.features.directionThresholdBpsFloor,
+            directionThresholdFixedCostBps: pilot.features.directionThresholdFixedCostBps ?? 0,
+          },
+          startIndex: Math.max(50, ranges.train.start),
+          endIndex: ranges.train.end - cell.horizonBars - 1,
+          decisionEveryBars: pilot.decisionEveryBars,
+          execution: {
+            feeBps: pilot.execution.feeBps,
+            slippageBps: pilot.execution.slippageBps,
+            spreadBpsFallback: pilot.execution.spreadBps,
+          },
+        });
+        const score = objective(r.metrics);
+        if (score > refinedTrain.score) refinedTrain = { policy, metrics: r.metrics, score };
+      }
+    }
+  }
+  bestTrain = refinedTrain;
+
   const validationStress = await validateUnderCosts(evaluator, cell, bestTrain!.policy);
   const nominal = validationStress.find((x) => x.multiplier === 1)!;
   const stress15 = validationStress.find((x) => x.multiplier === 1.5)!;
@@ -270,6 +309,7 @@ const selection = {
   sealedTestBars: split.test.length,
   chosen,
   grid,
+  policyRefinement: { flatExits, minChanges, sizeThresholdSets },
   costStressMultipliers,
   qualification,
   candidates,
