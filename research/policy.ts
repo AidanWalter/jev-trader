@@ -30,6 +30,7 @@ export function choosePolicyAction(
   const p = signal.direction.probabilities;
   const edge = p.long - p.short;
   const directionalConfidence = Math.max(p.long, p.short);
+  const directionOnly = config.directionOnly === true || signal.decisionMode === "direction-only";
 
   if (p.flat >= config.flatExitProbability) {
     if (Math.abs(currentExposure) < config.minExposureChange) {
@@ -38,7 +39,7 @@ export function choosePolicyAction(
     return { kind: "target", targetExposure: 0, score: p.flat, reason: "high flat probability" };
   }
 
-  if (signal.adverseSelection > config.maxAdverseSelection) {
+  if (!directionOnly && signal.adverseSelection > config.maxAdverseSelection) {
     return { kind: "hold", targetExposure: currentExposure, score: 0, reason: "adverse-selection gate" };
   }
 
@@ -46,9 +47,11 @@ export function choosePolicyAction(
     return { kind: "hold", targetExposure: currentExposure, score: Math.abs(edge), reason: "directional edge too small" };
   }
 
-  const score = Math.abs(edge) * magnitudeWeight(signal) * (1 - signal.adverseSelection);
+  const score = directionOnly
+    ? Math.abs(edge)
+    : Math.abs(edge) * magnitudeWeight(signal) * (1 - signal.adverseSelection);
 
-  if (context && context.estimatedRoundTripCostBps > 0) {
+  if (!directionOnly && context && context.estimatedRoundTripCostBps > 0) {
     const expectedMoveBps =
       context.directionThresholdBps *
       expectedMagnitudeMultiple(signal) *
