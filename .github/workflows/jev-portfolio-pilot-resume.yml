@@ -1,10 +1,7 @@
 name: jev-portfolio-pilot-resume
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/jev-portfolio-pilot-resume.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +9,7 @@ permissions:
 
 jobs:
   pilot:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
