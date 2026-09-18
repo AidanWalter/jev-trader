@@ -1,70 +1,15 @@
-name: jev-portfolio-sealed-autostart
+name: jev-portfolio-sealed-autostart-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  sealed:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: test -n "$TYPESAFE_AI_API_KEY"
-      - name: Download exact qualified frozen pilot artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: jev-portfolio-pilot-resume-35384350443
-          path: data
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35384350443
-      - name: Verify frozen files
-        run: |
-          test -s data/market/universe/universe.json
-          test -s data/portfolio-pilot-cache.jsonl
-          test -s data/portfolio-apparatus-selection.json
-          test -s data/portfolio-apparatus-freeze.json
-          jq -e '.qualification.passed == true' data/portfolio-apparatus-selection.json >/dev/null
-      - name: Zero-spend sealed preflight
-        run: |
-          bun run research/portfolio-sealed-preflight.ts data/portfolio-apparatus-freeze.json \
-            --manifest=data/market/universe/universe.json \
-            --cache=data/portfolio-pilot-cache.jsonl | tee data/portfolio-sealed-preflight-rerun.txt
-          grep -q 'new Jev calls required 228' data/portfolio-sealed-preflight-rerun.txt
-      - name: Run frozen sealed test exactly once
-        run: |
-          set -o pipefail
-          bun run research/run-portfolio-sealed-test.ts data/portfolio-apparatus-freeze.json \
-            --manifest=data/market/universe/universe.json \
-            --cache=data/portfolio-pilot-cache.jsonl \
-            --max-new-evals=300 \
-            --concurrency=4 \
-            --out=data/portfolio-sealed-result.json | tee data/portfolio-sealed-output.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jev-portfolio-sealed-autostart-${{ github.run_id }}
-          path: |
-            data/portfolio-apparatus-freeze.json
-            data/portfolio-apparatus-selection.json
-            data/portfolio-pilot-summary.json
-            data/portfolio-pilot-cache.jsonl
-            data/portfolio-sealed-preflight-rerun.txt
-            data/portfolio-sealed-output.txt
-            data/portfolio-sealed-result.json
-          retention-days: 90
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
