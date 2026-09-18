@@ -1,13 +1,17 @@
 import { replayBars } from "./replay";
 import type { FeatureState, JevSignal, MarketBar, SignalEvaluator } from "./types";
 
-class AlwaysLong implements SignalEvaluator {
-  readonly name = "test-always-long";
-  async evaluate(_state: FeatureState): Promise<JevSignal> {
+class SessionFlip implements SignalEvaluator {
+  readonly name = "test-session-flip";
+  constructor(private flipTs: number) {}
+  async evaluate(state: FeatureState): Promise<JevSignal> {
+    const short = state.ts >= this.flipTs;
     return {
       version: "test",
       model: this.name,
-      direction: { choice: "long", probabilities: { long: 0.99, flat: 0.005, short: 0.005 } },
+      direction: short
+        ? { choice: "short", probabilities: { long: 0.005, flat: 0.005, short: 0.99 } }
+        : { choice: "long", probabilities: { long: 0.99, flat: 0.005, short: 0.005 } },
       magnitude: { choice: "large", probabilities: { tiny: 0.005, small: 0.005, medium: 0.005, large: 0.985 } },
       adverseSelection: 0,
       latencyMs: 0,
@@ -37,8 +41,9 @@ const bars: MarketBar[] = [];
 for (let i = 0; i < 6; i++) bars.push(bar(day1 + i * step, 100 + i * 0.1));
 for (let i = 0; i < 6; i++) bars.push(bar(day2 + i * step, 101 + i * 0.1));
 
+const overnightDecisionTs = day1 + 5 * step;
 const result = await replayBars(bars, {
-  evaluator: new AlwaysLong(),
+  evaluator: new SessionFlip(overnightDecisionTs),
   features: { minHistoryBars: 2, directionThresholdBpsFloor: 1 },
   policy: {
     minDirectionalEdge: 0,
@@ -71,9 +76,8 @@ check(
   "trading resumes inside the second session",
   fills.some((f) => f.executionTs >= day2 && f.executionTs - f.decisionTs === step),
 );
-const overnightDecisionTs = day1 + 5 * step;
 check(
-  "last first-session decision has no overnight fill",
+  "last first-session reversal has no overnight fill",
   !fills.some((f) => f.decisionTs === overnightDecisionTs),
 );
 
