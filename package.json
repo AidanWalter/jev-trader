@@ -48,6 +48,7 @@
     "research:tune-portfolio": "bun run research/tune-portfolio-apparatus.ts",
     "research:freeze-portfolio": "bun run research/freeze-portfolio.ts",
     "research:portfolio-sealed-preflight": "bun run research/portfolio-sealed-preflight.ts",
-    "research:portfolio-sealed": "bun run research/run-portfolio-sealed-test.ts"
+    "research:portfolio-sealed": "bun run research/run-portfolio-sealed-test.ts",
+    "research:portfolio-probe": "bun run research/portfolio-probe.ts"
   }
 }
