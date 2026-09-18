@@ -52,6 +52,7 @@
     "research:portfolio-probe": "bun run research/portfolio-probe.ts",
     "research:check-stock-session": "bun run research/check-stock-session.ts",
     "research:portfolio-paper": "bun run research/live-frozen-binance-portfolio-paper.ts",
-    "data:binance-perps": "bun run scripts/download-binance-perp-universe.ts"
+    "data:binance-perps": "bun run scripts/download-binance-perp-universe.ts",
+    "research:check-perp-funding": "bun run research/check-perp-funding.ts"
   }
 }
