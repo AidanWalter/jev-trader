@@ -101,7 +101,7 @@ for (const horizonBars of horizons) {
     }
 
     const remainingTokenBudget = Number.isFinite(maxFreshInputTokens)
-      ? Math.max(0, maxFreshInputTokens - freshInputTokens)
+      ? Math.max(0, maxFreshInputTokens - totalFreshTokens)
       : Infinity;
     const evaluator = new CachedEvaluator(raw, cache, {
       maxNewEvaluations: sample.length,
