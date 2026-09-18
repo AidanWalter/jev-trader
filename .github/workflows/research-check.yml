@@ -37,5 +37,7 @@ jobs:
         run: bun run research:check-feature-context
       - name: Live boundary timing regression
         run: bun run research:check-live-boundary
+      - name: Concurrent cache budget regression
+        run: bun run research:check-cache-concurrency
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
