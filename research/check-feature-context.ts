@@ -53,6 +53,7 @@ const futureMutated = buildPortfolioFeatureStates(mutated, index, cfg).get("AAA"
 if (!futureMutated) throw new Error("future-mutated AAA state missing");
 
 const minimal = projectState(aaa, "minimal") as Record<string, unknown>;
+const lean = projectState(aaa, "lean") as Record<string, unknown>;
 const technical = projectState(aaa, "technical") as Record<string, unknown>;
 const path = projectState(aaa, "path") as Record<string, unknown>;
 const cross = projectState(aaa, "cross") as Record<string, unknown>;
@@ -70,6 +71,9 @@ check("relative momentum distinguishes the strongest asset", (aaa.marketContext?
 check("recent funding is point-in-time visible", aaa.lastFundingBps === 1.25 && aaa.barsSinceFunding === 4);
 
 check("minimal excludes funding", !("fundingBps" in minimal) && !("lastFundingBps" in minimal));
+check("lean excludes raw price and timestamp", !("price" in lean) && !("ts" in lean));
+check("lean keeps compact cross-sectional context", "marketContext" in lean);
+check("lean excludes recent return path", !("recentReturnsBps" in lean));
 check("technical includes perp funding", "fundingBps" in technical && "lastFundingBps" in technical);
 check("technical excludes path and cross context", !("recentReturnsBps" in technical) && !("marketContext" in technical));
 check("path adds recent return path only", "recentReturnsBps" in path && !("marketContext" in path));
@@ -93,6 +97,7 @@ console.log(JSON.stringify({
   },
   projectedKeys: {
     minimal: Object.keys(minimal).sort(),
+    lean: Object.keys(lean).sort(),
     technical: Object.keys(technical).sort(),
     path: Object.keys(path).sort(),
     cross: Object.keys(cross).sort(),
