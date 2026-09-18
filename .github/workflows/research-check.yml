@@ -35,5 +35,7 @@ jobs:
         run: bun run research:check-perp-funding
       - name: Cross-sectional feature regression
         run: bun run research:check-feature-context
+      - name: Live boundary timing regression
+        run: bun run research:check-live-boundary
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
