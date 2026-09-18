@@ -84,6 +84,8 @@ export interface FeatureConfig {
   minHistoryBars: number;
   spreadBpsFallback: number;
   directionThresholdSpreadMultiple: number;
+  /** Absolute lower bound for the economically meaningful move threshold. */
+  directionThresholdBpsFloor: number;
   recentPoints: number;
 }
 
