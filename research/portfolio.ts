@@ -155,7 +155,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
       const q = quantities.get(symbol) ?? 0;
       const bar = asset.bars[i]!;
       const next = asset.bars[nextIndex]!;
-      if (q < 0) {
+      if (q < 0 && bar.kind !== "perp") {
         const days = Math.max(0, next.ts - bar.ts) / 86_400_000;
         const cost = Math.abs(q * bar.close) * execution.shortBorrowBpsPerDay / 10_000 * days;
         cash -= cost;
