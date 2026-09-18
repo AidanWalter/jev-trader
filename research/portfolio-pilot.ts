@@ -183,6 +183,7 @@ for (const horizonBars of horizons) {
         turnover: validationReplay.turnover,
         fees: validationReplay.fees,
         borrowCost: validationReplay.borrowCost,
+        fundingNet: validationReplay.fundingNet,
         fills: validationReplay.fills.length,
       },
       newEvaluations: evaluator.newEvaluations,
