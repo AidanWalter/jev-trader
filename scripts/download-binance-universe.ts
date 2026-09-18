@@ -69,6 +69,11 @@ for (const symbol of symbols) {
 if (!assets.length) throw new Error("no universe assets downloaded");
 writeFileSync(manifestPath, JSON.stringify({
   name: "binance-" + interval + "-" + startRaw + "-" + endRaw,
+  provider: "binance-public",
+  requestedSymbols: symbols,
+  interval,
+  start: startRaw,
+  end: endRaw,
   assets,
 }, null, 2) + "\n");
 console.log("wrote universe manifest " + manifestPath + " with " + assets.length + " assets");
