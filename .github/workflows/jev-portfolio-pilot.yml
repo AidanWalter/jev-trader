@@ -77,6 +77,7 @@ jobs:
             exit 1
           fi
       - name: Download public crypto universe
+        if: ${{ inputs.probe_run_id == '' }}
         run: |
           bun run scripts/download-binance-universe.ts \
             --symbols="${{ inputs.symbols }}" \
@@ -95,19 +96,29 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.probe_run_id }}
-      - name: Reuse verified portfolio probe cache
+      - name: Reuse exact verified portfolio probe universe and cache
         if: ${{ inputs.probe_run_id != '' }}
         run: |
+          test -s probe/market/universe/universe.json
           test -s probe/portfolio-probe-summary.json
           test -s probe/portfolio-probe-cache.jsonl
+          jq -e \
+            --arg symbols "${{ inputs.symbols }}" \
+            --arg interval "${{ inputs.interval }}" \
+            --arg start "${{ inputs.start }}" \
+            --arg end "${{ inputs.end }}" \
+            '.requestedSymbols == ($symbols | split(",")) and .interval == $interval and .start == $start and .end == $end' \
+            probe/market/universe/universe.json >/dev/null
+          mkdir -p data/market
+          cp -R probe/market/universe data/market/universe
           ACTUAL="$(bun -e 'import { fingerprintUniverse } from "./research/universe"; console.log(fingerprintUniverse("data/market/universe/universe.json").combinedSha256)')"
           PROBE="$(jq -r '.fingerprint.combinedSha256' probe/portfolio-probe-summary.json)"
           if [ "$ACTUAL" != "$PROBE" ]; then
-            echo "Portfolio probe universe fingerprint does not match pilot universe"
+            echo "Portfolio probe universe fingerprint does not match copied universe"
             exit 1
           fi
           cp probe/portfolio-probe-cache.jsonl data/portfolio-pilot-cache.jsonl
-          echo "Reusing portfolio probe cache from run ${{ inputs.probe_run_id }}"
+          echo "Reusing exact portfolio universe and cache from probe run ${{ inputs.probe_run_id }}"
       - name: Run development-only Jev portfolio pilot
         run: |
           bun run research/portfolio-pilot.ts data/market/universe/universe.json \
