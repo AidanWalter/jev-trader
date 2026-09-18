@@ -22,7 +22,7 @@ check("missed bars force a reset even when the latest close matches", missed.isN
 const delayed = classifyLiveBoundary(base, base + interval, base - interval, interval);
 check("stale closed data cannot authorize a fill", delayed.isNew && !delayed.clean && delayed.gapBars === 1 && !delayed.priorClosedMatches);
 
-const overnightOpen = base + 18 * 60 * 60;
+const overnightOpen = base + 18 * 60 * 60 * 1000;
 const overnight = classifyLiveBoundary(base, overnightOpen, overnightOpen - interval, interval);
 check("overnight stock gap cannot authorize a next-open fill", overnight.isNew && !overnight.clean && overnight.gapBars > 1);
 
