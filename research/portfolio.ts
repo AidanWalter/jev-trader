@@ -13,6 +13,8 @@ export interface PortfolioReplayOptions {
   maxAssetExposure?: number;
   topN?: number;
   maxExecutionGapMultiple?: number;
+  startIndex?: number;
+  endIndex?: number;
 }
 
 export interface PortfolioFill {
@@ -85,8 +87,8 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
     const diffs = asset.bars.slice(1).map((b, i) => b.ts - asset.bars[i]!.ts).filter((x) => x > 0).sort((a, b) => a - b);
     typicalIntervals.set(asset.spec.symbol, diffs.length ? diffs[Math.floor(diffs.length / 2)]! : 0);
   }
-  const start = features.minHistoryBars;
-  const end = n - 2;
+  const start = Math.max(features.minHistoryBars, options.startIndex ?? features.minHistoryBars);
+  const end = Math.min(n - 2, options.endIndex ?? n - 2);
   if (start > end) throw new Error("not enough synchronized bars after feature warmup");
 
   let cash = execution.initialCash;
