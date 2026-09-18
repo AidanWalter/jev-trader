@@ -1,0 +1,31 @@
+name: research-check
+
+on:
+  push:
+    branches:
+      - research/replay-lab
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun x tsc --noEmit
+      - name: Replay smoke test
+        run: bun run research:check
+      - name: Fill ordering regression
+        run: bun run scripts/check-fill-order.ts
