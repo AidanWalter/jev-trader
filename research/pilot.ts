@@ -1,6 +1,7 @@
 import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
@@ -25,6 +26,7 @@ if (!file) {
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
 const modelName = flag("model", "jev")!;
+const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12").split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "minimal,technical,path,full") ?? "minimal,technical,path,full")
   .split(",").map((x) => x.trim()).filter(Boolean) as InputProfile[];
@@ -74,13 +76,19 @@ async function score(
   let calledReturn = 0;
 
   const start = Math.max(cfg.minHistoryBars, rangeStart);
+  const work: { state: ReturnType<typeof buildFeatureState> & {}; truth: Direction; r: number }[] = [];
   for (let i = start; i + horizonBars < rangeEnd; i += decisionEveryBars) {
     const state = buildFeatureState(bars, i, cfg);
     if (!state) continue;
     const future = bars[i + horizonBars]!;
     const r = (future.close / state.price - 1) * 10_000;
     const truth: Direction = r > state.directionThresholdBps ? "long" : r < -state.directionThresholdBps ? "short" : "flat";
-    const signal = await evaluator.evaluate(state);
+    work.push({ state, truth, r });
+  }
+  const signals = await mapLimit(work, concurrency, (x) => evaluator.evaluate(x.state));
+  for (let wi = 0; wi < work.length; wi++) {
+    const { truth, r } = work[wi]!;
+    const signal = signals[wi]!;
     n++;
     if (signal.direction.choice === truth) correct++;
     for (const label of labels) {
@@ -218,6 +226,7 @@ const summary = {
   horizons,
   profiles,
   newEvaluationBudget: maxNewEvaluations,
+  concurrency,
   usedNewEvaluations,
   freshInputTokens: rows.reduce((s, x) => s + (x.freshInputTokens ?? 0), 0),
   rows,
