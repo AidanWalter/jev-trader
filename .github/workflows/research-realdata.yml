@@ -29,6 +29,10 @@ jobs:
         run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
       - name: Walk-forward baseline
         run: bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
+      - name: Download synchronized BTC ETH SOL universe
+        run: bun run scripts/download-binance-universe.ts --symbols=BTCUSDT,ETHUSDT,SOLUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out-dir=data/market/universe --manifest=data/market/universe/universe.json
+      - name: Shared-bankroll momentum portfolio
+        run: bun run research/run-portfolio.ts data/market/universe/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio.txt
       - uses: actions/upload-artifact@v4
         with:
           name: btc-public-data-baselines
@@ -36,4 +40,5 @@ jobs:
             data/momentum.txt
             data/random.txt
             data/walk-forward.txt
+            data/portfolio.txt
           retention-days: 14
