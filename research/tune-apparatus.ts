@@ -101,7 +101,7 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
               policy,
               features: { horizonBars: cell.horizonBars },
               startIndex: Math.max(50, ranges.train.start),
-              endIndex: ranges.train.end - 2,
+              endIndex: ranges.train.end - cell.horizonBars - 1,
               decisionEveryBars: pilot.decisionEveryBars,
               execution: {
                 feeBps: pilot.execution.feeBps,
@@ -122,7 +122,7 @@ for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
     policy: bestTrain!.policy,
     features: { horizonBars: cell.horizonBars },
     startIndex: ranges.validation.start,
-    endIndex: ranges.validation.end - 2,
+    endIndex: ranges.validation.end - cell.horizonBars - 1,
     decisionEveryBars: pilot.decisionEveryBars,
     execution: {
       feeBps: pilot.execution.feeBps,
