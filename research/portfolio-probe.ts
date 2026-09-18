@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
-import { buildFeatureState, defaultFeatureConfig } from "./features";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import type { InputProfile } from "./profiles";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
 import type { FeatureState } from "./types";
@@ -61,11 +62,13 @@ function candidateStates(horizonBars: number): StateRow[] {
     directionThresholdFixedCostBps,
   };
   const out: StateRow[] = [];
+  const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
   for (const range of [ranges.train, ranges.validation]) {
     const first = Math.max(cfg.minHistoryBars, range.start);
     for (let i = first; i + horizonBars < range.end; i += decisionEveryBars) {
+      const states = buildPortfolioFeatureStates(series, i, cfg);
       for (const asset of assets) {
-        const state = buildFeatureState(asset.bars, i, cfg);
+        const state = states.get(asset.spec.symbol);
         if (state) out.push({ state, symbol: asset.spec.symbol });
       }
     }
