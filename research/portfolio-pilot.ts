@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
-import { buildFeatureState, defaultFeatureConfig } from "./features";
+import { defaultFeatureConfig } from "./features";
+import { buildPortfolioFeatureStates } from "./portfolio-features";
 import type { InputProfile } from "./profiles";
 import { replayPortfolio } from "./portfolio";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
@@ -70,9 +71,11 @@ function collectStates(
   };
   const out: { state: FeatureState; assetIndex: number; barIndex: number }[] = [];
   const first = Math.max(cfg.minHistoryBars, range.start);
+  const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
   for (let i = first; i + horizonBars < range.end; i += decisionEveryBars) {
+    const states = buildPortfolioFeatureStates(series, i, cfg);
     for (let a = 0; a < assets.length; a++) {
-      const state = buildFeatureState(assets[a]!.bars, i, cfg);
+      const state = states.get(assets[a]!.spec.symbol);
       if (state) out.push({ state, assetIndex: a, barIndex: i });
     }
   }
