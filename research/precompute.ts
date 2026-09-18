@@ -52,7 +52,7 @@ const featureConfig = { ...defaultFeatureConfig, horizonBars };
 
 let evaluated = 0;
 const firstIndex = Math.max(featureConfig.minHistoryBars, selectedRange.start);
-for (let i = firstIndex; i < selectedRange.end - 1; i += decisionEveryBars) {
+for (let i = firstIndex; i + horizonBars < selectedRange.end; i += decisionEveryBars) {
   const state = buildFeatureState(bars, i, featureConfig);
   if (!state) continue;
   await evaluator.evaluate(state);
