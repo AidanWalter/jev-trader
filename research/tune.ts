@@ -74,7 +74,7 @@ for (const minDirectionalEdge of edges) {
           policy,
           features: { horizonBars },
           startIndex: Math.max(50, ranges.train.start),
-          endIndex: ranges.train.end - 2,
+          endIndex: ranges.train.end - horizonBars - 1,
           decisionEveryBars,
           execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
         });
@@ -94,7 +94,7 @@ for (const c of finalists) {
     policy: c.policy,
     features: { horizonBars },
     startIndex: ranges.validation.start,
-    endIndex: ranges.validation.end - 2,
+    endIndex: ranges.validation.end - horizonBars - 1,
     decisionEveryBars,
     execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
   });
