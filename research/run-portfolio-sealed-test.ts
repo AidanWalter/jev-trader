@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
 import { mapLimit } from "./concurrency";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
@@ -84,8 +85,19 @@ if (raw.name !== freeze.evaluator.namespace) {
   throw new Error("evaluator namespace changed since freeze: frozen=" + freeze.evaluator.namespace + " current=" + raw.name);
 }
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", "0")));
-const concurrency = Math.max(1, Number(flag("concurrency", freeze.evaluator.kind === "jev" ? "4" : "8")));
-const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations);
+const paidModel = freeze.evaluator.kind.startsWith("jev");
+const concurrency = Math.max(1, Number(flag("concurrency", paidModel ? "1" : "8")));
+const spendLedger = paidModel && maxNewEvaluations > 0
+  ? new SpendBudgetLedger(defaultSpendBudget({
+      maxRequests: Math.max(1, Number(flag("max-paid-requests", "50"))),
+      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "125000"))),
+      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.01"))),
+      usdPerMTok: Number(flag("usd-per-mtok", "0.042")),
+      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
+    }))
+  : null;
+const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
+const evaluator = new CachedEvaluator(paidRaw, cache, maxNewEvaluations);
 
 const sealedFeatureConfig = {
   ...defaultFeatureConfig,
@@ -271,6 +283,7 @@ console.log(
   " · market forward " + signalDiagnostics.overall.meanForwardReturnBps.toFixed(2) + " bps"
 );
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
+if (spendLedger) console.log("HARD SPEND RECEIPT " + JSON.stringify(spendLedger.snapshot()));
 
 const outPath = flag("out");
 if (outPath) {
@@ -285,6 +298,8 @@ if (outPath) {
     concurrency,
     prefetchedMissingStates: missingStates.length,
     newEvaluations: evaluator.newEvaluations,
+    spendBudget: spendLedger?.budget ?? null,
+    spend: spendLedger?.snapshot() ?? null,
     freshInputTokens: evaluator.newInputTokens,
     diagnostics: { turnoverPerDay, signal: signalDiagnostics },
     benchmarks: {
