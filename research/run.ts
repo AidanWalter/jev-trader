@@ -35,7 +35,7 @@ const directionThresholdBpsFloor = Number(flag(
   "direction-threshold-bps",
   String(spreadBps + 2 * slippageBps + 2 * feeBps),
 ));
-const allowShort = flag("allow-short", "true") !== "false";
+const allowShort = flag("allow-short", kind === "perp" ? "true" : "false") !== "false";
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "1000" : "1000000000")));
 
