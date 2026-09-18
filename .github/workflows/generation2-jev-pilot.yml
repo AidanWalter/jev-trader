@@ -1,95 +1,15 @@
-name: generation2-jev-pilot
+name: generation2-jev-pilot-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  pilot:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: test -n "$TYPESAFE_AI_API_KEY"
-      - name: Download exact generation-two probe artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: generation2-jev-probe-35390262714
-          path: data/g2
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35390262714
-      - name: Verify exact probe experiment and restore cache
-        run: |
-          test -s data/g2/universe/universe.json
-          test -s data/g2/portfolio-probe-cache.jsonl
-          test -s data/g2/portfolio-probe-summary.json
-          jq -e '
-            .horizons == [8,12] and
-            .profiles == ["technical","path","cross","full"] and
-            .decisionEveryBars == 8 and
-            .symbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
-            .alignedBars == 23400 and
-            .sealedTestBars == 4680
-          ' data/g2/portfolio-probe-summary.json >/dev/null
-          cp data/g2/portfolio-probe-cache.jsonl data/g2/portfolio-pilot-cache.jsonl
-      - name: Complete generation-two Jev development matrix
-        run: |
-          bun run research/portfolio-pilot.ts data/g2/universe/universe.json \
-            --model=jev \
-            --require-complete-grid=true \
-            --concurrency=4 \
-            --horizons=8,12 \
-            --profiles=technical,path,cross,full \
-            --decision-every=8 \
-            --top-n=2 \
-            --max-gross=1 \
-            --max-asset=0.5 \
-            --allow-short=false \
-            --max-new-evals=60000 \
-            --cache=data/g2/portfolio-pilot-cache.jsonl \
-            --out=data/g2/portfolio-pilot-summary.json
-      - name: Tune coarse shared-bankroll apparatus
-        run: |
-          bun run research/tune-portfolio-apparatus.ts data/g2/universe/universe.json \
-            --pilot=data/g2/portfolio-pilot-summary.json \
-            --cache=data/g2/portfolio-pilot-cache.jsonl \
-            --grid=full \
-            --out=data/g2/portfolio-apparatus-selection.json
-      - name: Freeze only qualified generation-two apparatus
-        run: |
-          bun run research/freeze-portfolio.ts data/g2/universe/universe.json \
-            --selection=data/g2/portfolio-apparatus-selection.json \
-            --out=data/g2/portfolio-apparatus-freeze.json
-      - name: Zero-spend new sealed-tail preflight
-        if: ${{ success() }}
-        run: |
-          bun run research/portfolio-sealed-preflight.ts data/g2/portfolio-apparatus-freeze.json \
-            --manifest=data/g2/universe/universe.json \
-            --cache=data/g2/portfolio-pilot-cache.jsonl | tee data/g2/portfolio-sealed-preflight.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: generation2-jev-pilot-${{ github.run_id }}
-          path: |
-            data/g2/universe/
-            data/g2/portfolio-pilot-cache.jsonl
-            data/g2/portfolio-pilot-summary.json
-            data/g2/portfolio-apparatus-selection.json
-            data/g2/portfolio-apparatus-freeze.json
-            data/g2/portfolio-sealed-preflight.txt
-          retention-days: 45
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
