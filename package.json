@@ -58,6 +58,8 @@
     "research:stock-portfolio-paper": "bun run research/live-frozen-yahoo-stock-portfolio-paper.ts",
     "research:check-live-boundary": "bun run research/check-live-boundary.ts",
     "research:check-cache-concurrency": "bun run research/check-cache-concurrency.ts",
-    "research:hyperliquid-portfolio-paper": "bun run research/live-frozen-hyperliquid-portfolio-paper.ts"
+    "research:hyperliquid-portfolio-paper": "bun run research/live-frozen-hyperliquid-portfolio-paper.ts",
+    "research:safe-jev-probe": "bun run research/safe-jev-direction-probe.ts",
+    "research:check-safe-jev": "bun run research/check-safe-jev.ts"
   }
 }
