@@ -91,10 +91,26 @@ export class JevReplayEvaluator implements SignalEvaluator {
       } catch (error) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);
-        const retryableChoiceMismatch =
-          message.includes("did not select a highest-probability option");
-        if (!retryableChoiceMismatch || attempt === 2) throw error;
-        await Bun.sleep(50 * (attempt + 1));
+        const name = error instanceof Error ? error.name : "";
+        const lower = message.toLowerCase();
+        const retryable =
+          message.includes("did not select a highest-probability option") ||
+          name === "TimeoutError" ||
+          lower.includes("timed out") ||
+          lower.includes("timeout") ||
+          lower.includes("fetch failed") ||
+          lower.includes("econnreset") ||
+          lower.includes("etimedout") ||
+          lower.includes("rate limit") ||
+          lower.includes("too many requests") ||
+          /(^|\D)429(\D|$)/.test(message) ||
+          /(^|\D)50[234](\D|$)/.test(message);
+        if (!retryable || attempt === 2) throw error;
+        console.warn(
+          "Jev transient evaluation failure; retry " + (attempt + 2) + "/3 · " +
+          (name ? name + ": " : "") + message.slice(0, 180)
+        );
+        await Bun.sleep(250 * 2 ** attempt);
       }
     }
     if (!r) {
