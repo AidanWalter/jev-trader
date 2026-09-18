@@ -93,6 +93,7 @@ jobs:
         with:
           name: jev-pilot-${{ inputs.symbol }}-${{ github.run_id }}
           path: |
+            data/market/pilot.csv
             data/jev-pilot-summary.json
             data/jev-pilot-cache.jsonl
             data/apparatus-selection.json
