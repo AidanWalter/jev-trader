@@ -66,7 +66,9 @@ const grid = flag("grid", "full")!;
 const fast = grid === "fast";
 
 const edges = fast ? [0.08, 0.14] : [0.04, 0.08, 0.12, 0.16];
-const confidences = fast ? [0.48, 0.58] : [0.42, 0.48, 0.54, 0.60];
+const confidences = fast
+  ? [0.58, 0.80, 0.90]
+  : [0.42, 0.48, 0.54, 0.60, 0.70, 0.80, 0.90, 0.95];
 const adverse = fast ? [0.65, 0.90] : [0.55, 0.65, 0.75, 0.90];
 const costMultiples = fast ? [0.5, 1.25] : [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
 const topNs = fast
