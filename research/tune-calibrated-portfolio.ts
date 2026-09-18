@@ -85,9 +85,10 @@ function objective(r: PortfolioResult) {
 }
 
 function alignedCut(start: number, end: number, fraction: number, every: number) {
-  const raw = start + Math.floor((end - start) * fraction);
-  const steps = Math.max(1, Math.floor((raw - start) / every));
-  return Math.min(end - every, start + steps * every);
+  const anchor = Math.max(defaultFeatureConfig.minHistoryBars, start);
+  const raw = anchor + Math.floor((end - anchor) * fraction);
+  const steps = Math.max(1, Math.floor((raw - anchor) / every));
+  return Math.min(end - every, anchor + steps * every);
 }
 
 function validationSegments(decisionEveryBars: number) {
