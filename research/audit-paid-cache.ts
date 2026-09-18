@@ -224,7 +224,7 @@ const audit = {
   version: "paid-jev-cache-audit-v1",
   createdAt: Date.now(),
   manifest,
-  cacheFiles: cachePaths.map(basename),
+  cacheFiles: cachePaths.map((p) => basename(p)),
   rawRecords,
   uniqueMatchedRecords: observations.length,
   skipped,
