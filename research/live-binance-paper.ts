@@ -52,6 +52,7 @@ const policy = {
   flatExitProbability: Number(flag("flat-exit", String(defaultPolicyConfig.flatExitProbability))),
   maxAdverseSelection: Number(flag("max-adverse", String(defaultPolicyConfig.maxAdverseSelection))),
   maxTargetExposure: Number(flag("max-exposure", String(defaultPolicyConfig.maxTargetExposure))),
+  minExpectedMoveCostMultiple: Number(flag("cost-multiple", String(defaultPolicyConfig.minExpectedMoveCostMultiple))),
 };
 const raw = createReplayEvaluator(modelName, profile);
 const cache = new JsonlSignalCache(cachePath);
