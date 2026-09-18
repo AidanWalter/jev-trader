@@ -77,6 +77,10 @@ const record = {
   fingerprint,
   universe: {
     symbols: assets.map((a) => a.spec.symbol),
+    intervalMs: (() => {
+      const diffs = bars.slice(1).map((b, i) => b.ts - bars[i]!.ts).filter((x) => x > 0).sort((a, b) => a - b);
+      return diffs.length ? diffs[Math.floor(diffs.length / 2)]! : 0;
+    })(),
     kinds: Object.fromEntries(assets.map((a) => [a.spec.symbol, a.spec.kind])),
     spreadsBps: Object.fromEntries(assets.map((a) => [a.spec.symbol, a.spec.spreadBps ?? null])),
     alignedBars: bars.length,
