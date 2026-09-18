@@ -58,6 +58,7 @@ const defaultExecution: ExecutionConfig = {
   feeBps: 2,
   slippageBps: 1,
   spreadBpsFallback: 5,
+  spreadCostMultiplier: 1,
   maxGrossExposure: 1,
   minTradeNotional: 1,
   allowShort: true,
@@ -148,7 +149,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
         const signal = await options.evaluator.evaluate(state);
         const q = quantities.get(asset.spec.symbol) ?? 0;
         const currentExposure = q * asset.bars[i]!.close / portfolioEquity;
-        const roundTripCostBps = state.spreadBps + 2 * execution.slippageBps + 2 * execution.feeBps;
+        const roundTripCostBps = state.spreadBps * execution.spreadCostMultiplier + 2 * execution.slippageBps + 2 * execution.feeBps;
         const action = choosePolicyAction(signal, currentExposure, policy, {
           directionThresholdBps: state.directionThresholdBps,
           estimatedRoundTripCostBps: roundTripCostBps,
@@ -194,7 +195,7 @@ export async function replayPortfolio(assets: LoadedAsset[], options: PortfolioR
 
         const side = delta > 0 ? "buy" : "sell";
         const spread = next.spreadBps ?? asset.bars[i]!.spreadBps ?? execution.spreadBpsFallback;
-        const friction = spread / 2 + execution.slippageBps;
+        const friction = spread * execution.spreadCostMultiplier / 2 + execution.slippageBps;
         const price = next.open * (1 + (side === "buy" ? 1 : -1) * friction / 10_000);
         const notional = Math.abs(delta * price);
         const fee = notional * execution.feeBps / 10_000;
