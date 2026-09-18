@@ -62,6 +62,8 @@ export interface ChoiceDistribution<T extends string> {
 
 export interface JevSignal {
   version: string;
+  /** Which Jev outputs the downstream policy is allowed to use. */
+  decisionMode?: "full" | "direction-only";
   model: string;
   direction: ChoiceDistribution<Direction>;
   magnitude: ChoiceDistribution<Magnitude>;
@@ -77,6 +79,8 @@ export interface SignalEvaluator {
 }
 
 export interface PolicyConfig {
+  /** Ignore magnitude/adverse outputs and size purely from Jev direction probabilities. */
+  directionOnly?: boolean;
   minDirectionalEdge: number;
   minDirectionalConfidence: number;
   flatExitProbability: number;
