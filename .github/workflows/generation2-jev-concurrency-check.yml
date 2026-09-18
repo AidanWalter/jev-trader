@@ -1,53 +1,15 @@
-name: generation2-jev-concurrency-check
+name: generation2-jev-concurrency-check-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  check:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Download generation-two universe
-        uses: actions/download-artifact@v4
-        with:
-          pattern: generation2-free-scan-35388923207
-          path: data/g2
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35388923207
-      - name: Test sixteen concurrent Jev calls
-        run: |
-          bun run research/portfolio-probe.ts data/g2/universe/universe.json \
-            --model=jev \
-            --concurrency=16 \
-            --horizons=8 \
-            --profiles=path \
-            --decision-every=8 \
-            --sample-per-cell=16 \
-            --max-new-evals=16 \
-            --cache=data/g2/concurrency-cache.jsonl \
-            --out=data/g2/concurrency-summary.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: generation2-concurrency-check-${{ github.run_id }}
-          path: |
-            data/g2/concurrency-cache.jsonl
-            data/g2/concurrency-summary.json
-          retention-days: 14
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
