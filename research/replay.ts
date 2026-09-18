@@ -172,7 +172,11 @@ export async function replayBars(input: MarketBar[], options: ReplayOptions): Pr
     const state = buildFeatureState(bars, i, features);
     if (!state) continue;
     const signal = await options.evaluator.evaluate(state);
-    const action = choosePolicyAction(signal, exposure(bar.close), policy);
+    const roundTripCostBps = state.spreadBps + 2 * execution.slippageBps + 2 * execution.feeBps;
+    const action = choosePolicyAction(signal, exposure(bar.close), policy, {
+      directionThresholdBps: state.directionThresholdBps,
+      estimatedRoundTripCostBps: roundTripCostBps,
+    });
     let fill: FillRecord | null = null;
 
     if (action.kind === "target" && next.open > 0) {
