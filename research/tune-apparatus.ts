@@ -21,6 +21,7 @@ interface PilotSummary {
   kind: AssetKind;
   dataset: { sha256: string; bars: number };
   decisionEveryBars: number;
+  modelName: string;
   execution: { spreadBps: number; feeBps: number; slippageBps: number };
   features: { directionThresholdBpsFloor: number };
   rows: PilotRow[];
@@ -77,7 +78,7 @@ function objective(m: ReplayMetrics) {
 
 const candidates: any[] = [];
 for (const cell of pilot.rows.filter((x) => x.status === "complete")) {
-  const raw = createReplayEvaluator("jev", cell.profile);
+  const raw = createReplayEvaluator(pilot.modelName, cell.profile);
   if (raw.name !== cell.evaluatorNamespace) {
     throw new Error("evaluator namespace changed since pilot for " + cell.profile + " h=" + cell.horizonBars);
   }
@@ -168,6 +169,7 @@ const selection = {
   datasetSha256: actualHash,
   symbol: pilot.symbol,
   kind: pilot.kind,
+  evaluatorKind: pilot.modelName,
   decisionEveryBars: pilot.decisionEveryBars,
   execution: pilot.execution,
   features: pilot.features,
