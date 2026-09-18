@@ -4,6 +4,7 @@ import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { choosePolicyAction } from "./policy";
+import { classifyLiveBoundary } from "./live-boundary";
 import { allocatePortfolioTargets, type PortfolioCandidate } from "./portfolio";
 import type { InputProfile } from "./profiles";
 import type { PolicyConfig, MarketBar } from "./types";
@@ -472,19 +473,25 @@ while (cycles === 0 || cycle < cycles) {
         " · equity $" + markEquity(state, openPrices).toFixed(2)
       );
     } else if (currentTs > state.lastOpenTs) {
-      const gapBars = Math.max(1, Math.round((currentTs - state.lastOpenTs) / freeze.universe.intervalMs));
+      const latestClosedTs = closedBySymbol.get(state.symbols[0]!)!.at(-1)!.ts;
+      const boundary = classifyLiveBoundary(
+        state.lastOpenTs,
+        currentTs,
+        latestClosedTs,
+        freeze.universe.intervalMs,
+      );
       const carrying = accrueCarryingCosts(state, closedBySymbol, currents);
       state.lastOpenTs = currentTs;
 
       let targets: Record<string, number> | null = null;
       let fills: any[] = [];
-      if (gapBars > 1) {
+      if (!boundary.clean) {
         state.barsSinceDecision = Math.max(0, freeze.cadence.decisionEveryBars - 1);
         writeEvent({
           type: "resume-gap",
           at: Date.now(),
           currentBarTs: currentTs,
-          gapBars,
+          gapBars: boundary.gapBars,
           note: "No retroactive fill or decision was simulated after missed bar boundaries.",
         });
       } else {
@@ -504,7 +511,7 @@ while (cycles === 0 || cycle < cycles) {
         " · " + marketKind +
         " · equity $" + markEquity(state, openPrices).toFixed(2) +
         " · gross " + gross.toFixed(3) +
-        (gapBars > 1 ? " · resumed after " + gapBars + "-bar gap" : "") +
+        (gapBars > 1 ? " · boundary reset after " + boundary.gapBars + "-bar gap" : "") +
         (targets ? " · decision and same-boundary fill simulation" : " · no decision this bar") +
         (fills.length ? " · fills " + fills.length : "") +
         (carrying.borrow > 0 ? " · borrow $" + carrying.borrow.toFixed(6) : "") +
