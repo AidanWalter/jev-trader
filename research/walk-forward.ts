@@ -30,6 +30,10 @@ const decisionEveryBars = Math.max(1, Number(flag("decision-every", "1")));
 const spreadBps = Number(flag("spread-bps", kind === "stock" ? "2" : "4"));
 const feeBps = Number(flag("fee-bps", kind === "stock" ? "1" : "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
+const directionThresholdBpsFloor = Number(flag(
+  "direction-threshold-bps",
+  String(spreadBps + 2 * slippageBps + 2 * feeBps),
+));
 const maxNewEvaluations = Math.max(0, Number(flag("max-new-evals", modelName === "jev" ? "25000" : "1000000000")));
 const cache = new JsonlSignalCache(flag("cache", "data/jev-cache.jsonl")!);
 const evaluator = new CachedEvaluator(createReplayEvaluator(modelName, profile), cache, maxNewEvaluations);
@@ -96,7 +100,7 @@ for (const fold of folds) {
     const r = await replayBars(bars, {
       evaluator,
       policy,
-      features: { horizonBars },
+      features: { horizonBars, directionThresholdBpsFloor },
       startIndex: Math.max(50, fold.train.start),
       endIndex: fold.train.end - horizonBars - 1,
       decisionEveryBars,
@@ -108,7 +112,7 @@ for (const fold of folds) {
   const validation = await replayBars(bars, {
     evaluator,
     policy: best!.policy,
-    features: { horizonBars },
+    features: { horizonBars, directionThresholdBpsFloor },
     startIndex: fold.validation.start,
     endIndex: fold.validation.end - horizonBars - 1,
     decisionEveryBars,
