@@ -126,7 +126,7 @@ jobs:
             --out=data/sealed/result.json | tee data/sealed/output.txt
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: jev-direction-sealed-development-${{ inputs.development_run_id }}
           path: |
@@ -139,3 +139,11 @@ jobs:
             data/sealed/output.txt
             data/sealed/result.json
           retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-sealed-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
+
