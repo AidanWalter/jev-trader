@@ -511,7 +511,7 @@ while (cycles === 0 || cycle < cycles) {
         " · " + marketKind +
         " · equity $" + markEquity(state, openPrices).toFixed(2) +
         " · gross " + gross.toFixed(3) +
-        (boundary.gapBars > 1 ? " · boundary reset after " + boundary.boundary.gapBars + "-bar gap" : "") +
+        (boundary.gapBars > 1 ? " · boundary reset after " + boundary.gapBars + "-bar gap" : "") +
         (targets ? " · decision and same-boundary fill simulation" : " · no decision this bar") +
         (fills.length ? " · fills " + fills.length : "") +
         (carrying.borrow > 0 ? " · borrow $" + carrying.borrow.toFixed(6) : "") +
