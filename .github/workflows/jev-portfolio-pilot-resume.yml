@@ -1,90 +1,15 @@
-name: jev-portfolio-pilot-resume
+name: jev-portfolio-pilot-resume-disabled
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  pilot:
-    if: ${{ false }}
+  disabled:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: research/replay-lab
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Require TypeSafe secret
-        run: |
-          test -n "$TYPESAFE_AI_API_KEY"
-      - name: Download failed pilot artifact with partial paid cache
-        uses: actions/download-artifact@v4
-        with:
-          pattern: jev-portfolio-pilot-autostart-35383904075
-          path: resume
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35383904075
-      - name: Restore exact universe and partial cache
-        run: |
-          test -s resume/market/universe/universe.json
-          test -s resume/portfolio-pilot-cache.jsonl
-          mkdir -p data/market
-          cp -R resume/market/universe data/market/universe
-          cp resume/portfolio-pilot-cache.jsonl data/portfolio-pilot-cache.jsonl
-          echo "Restored $(wc -l < data/portfolio-pilot-cache.jsonl) cached Jev answers"
-      - name: Complete development-only Jev portfolio pilot
-        run: |
-          bun run research/portfolio-pilot.ts data/market/universe/universe.json \
-            --model=jev \
-            --require-complete-grid=true \
-            --concurrency=4 \
-            --horizons=6,12 \
-            --profiles=technical,path,cross,full \
-            --decision-every=8 \
-            --top-n=2 \
-            --max-gross=1 \
-            --max-asset=0.5 \
-            --allow-short=false \
-            --max-new-evals=8000 \
-            --cache=data/portfolio-pilot-cache.jsonl \
-            --out=data/portfolio-pilot-summary.json
-      - name: Tune shared-bankroll apparatus from cached Jev probabilities
-        run: |
-          bun run research/tune-portfolio-apparatus.ts data/market/universe/universe.json \
-            --pilot=data/portfolio-pilot-summary.json \
-            --cache=data/portfolio-pilot-cache.jsonl \
-            --grid=full \
-            --out=data/portfolio-apparatus-selection.json
-      - name: Freeze only if validation qualification passes
-        run: |
-          bun run research/freeze-portfolio.ts data/market/universe/universe.json \
-            --selection=data/portfolio-apparatus-selection.json \
-            --out=data/portfolio-apparatus-freeze.json
-      - name: Zero-spend sealed-test preflight
-        if: ${{ success() }}
-        run: |
-          bun run research/portfolio-sealed-preflight.ts data/portfolio-apparatus-freeze.json \
-            --manifest=data/market/universe/universe.json \
-            --cache=data/portfolio-pilot-cache.jsonl | tee data/portfolio-sealed-preflight.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jev-portfolio-pilot-resume-${{ github.run_id }}
-          path: |
-            data/market/universe/
-            data/portfolio-pilot-cache.jsonl
-            data/portfolio-pilot-summary.json
-            data/portfolio-apparatus-selection.json
-            data/portfolio-apparatus-freeze.json
-            data/portfolio-sealed-preflight.txt
-          retention-days: 30
+      - run: |
+          echo "This legacy paid Jev workflow is disabled."
+          echo "Use safe-jev-direction-probe for any future paid Jev call."
