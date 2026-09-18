@@ -51,6 +51,7 @@
     "research:portfolio-sealed": "bun run research/run-portfolio-sealed-test.ts",
     "research:portfolio-probe": "bun run research/portfolio-probe.ts",
     "research:check-stock-session": "bun run research/check-stock-session.ts",
-    "research:portfolio-paper": "bun run research/live-frozen-binance-portfolio-paper.ts"
+    "research:portfolio-paper": "bun run research/live-frozen-binance-portfolio-paper.ts",
+    "data:binance-perps": "bun run scripts/download-binance-perp-universe.ts"
   }
 }
