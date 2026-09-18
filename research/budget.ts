@@ -26,26 +26,55 @@ export class SpendBudgetExceededError extends Error {
   }
 }
 
-export class BudgetedEvaluator implements SignalEvaluator {
-  readonly name: string;
+export class SpendBudgetLedger {
   requestsStarted = 0;
   requestsCompleted = 0;
   inputTokens = 0;
   private reservedTokens = 0;
 
-  constructor(
-    private inner: SignalEvaluator,
-    readonly budget: SpendBudget,
-  ) {
-    this.name = inner.name;
+  constructor(readonly budget: SpendBudget) {
     if (!(budget.maxRequests >= 1)) throw new Error("maxRequests must be at least 1");
     if (!(budget.usdPerMTok > 0)) throw new Error("usdPerMTok must be positive");
+    if (!(budget.maxUsd > 0)) throw new Error("maxUsd must be positive");
     if (!(budget.reserveTokensPerRequest > 0)) throw new Error("reserveTokensPerRequest must be positive");
   }
 
   private tokenCeiling() {
     const byUsd = Math.floor(this.budget.maxUsd / this.budget.usdPerMTok * 1_000_000);
     return Math.min(this.budget.maxInputTokens, byUsd);
+  }
+
+  reserve() {
+    if (this.requestsStarted >= this.budget.maxRequests) {
+      throw new SpendBudgetExceededError(
+        "paid request cap reached (" + this.budget.maxRequests + ")"
+      );
+    }
+    const ceiling = this.tokenCeiling();
+    const reserve = this.budget.reserveTokensPerRequest;
+    if (this.inputTokens + this.reservedTokens + reserve > ceiling) {
+      throw new SpendBudgetExceededError(
+        "input-token/dollar budget would be exceeded by another reserved request"
+      );
+    }
+    this.requestsStarted++;
+    this.reservedTokens += reserve;
+    return reserve;
+  }
+
+  complete(reservation: number, inputTokens: number) {
+    this.reservedTokens -= reservation;
+    this.inputTokens += Math.max(0, inputTokens);
+    this.requestsCompleted++;
+    if (this.inputTokens > this.tokenCeiling()) {
+      throw new SpendBudgetExceededError(
+        "provider-reported input tokens exceeded the configured budget after the last request"
+      );
+    }
+  }
+
+  release(reservation: number) {
+    this.reservedTokens = Math.max(0, this.reservedTokens - reservation);
   }
 
   snapshot(): SpendSnapshot {
@@ -62,39 +91,28 @@ export class BudgetedEvaluator implements SignalEvaluator {
       remainingUsd: Math.max(0, this.budget.maxUsd - estimatedUsd),
     };
   }
+}
+
+export class BudgetedEvaluator implements SignalEvaluator {
+  readonly name: string;
+
+  constructor(
+    private inner: SignalEvaluator,
+    readonly ledger: SpendBudgetLedger,
+  ) {
+    this.name = inner.name;
+  }
 
   async evaluate(state: FeatureState): Promise<JevSignal> {
-    if (this.requestsStarted >= this.budget.maxRequests) {
-      throw new SpendBudgetExceededError(
-        "paid request cap reached (" + this.budget.maxRequests + ")"
-      );
-    }
-
-    const ceiling = this.tokenCeiling();
-    const reserve = this.budget.reserveTokensPerRequest;
-    if (this.inputTokens + this.reservedTokens + reserve > ceiling) {
-      throw new SpendBudgetExceededError(
-        "input-token/dollar budget would be exceeded by another reserved request"
-      );
-    }
-
-    // This reservation occurs synchronously before the first await, so concurrent
-    // workers cannot all pass the same remaining-budget check.
-    this.requestsStarted++;
-    this.reservedTokens += reserve;
-
+    const reservation = this.ledger.reserve();
+    let completed = false;
     try {
       const signal = await this.inner.evaluate(state);
-      this.inputTokens += Math.max(0, signal.inputTokens);
-      this.requestsCompleted++;
-      if (this.inputTokens > ceiling) {
-        throw new SpendBudgetExceededError(
-          "provider-reported input tokens exceeded the configured budget after the last request"
-        );
-      }
+      this.ledger.complete(reservation, signal.inputTokens);
+      completed = true;
       return signal;
     } finally {
-      this.reservedTokens -= reserve;
+      if (!completed) this.ledger.release(reservation);
     }
   }
 }
