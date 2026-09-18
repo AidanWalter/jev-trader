@@ -27,6 +27,10 @@
     "research:portfolio": "bun run research/run-portfolio.ts",
     "research:check-portfolio": "bun run research/check-portfolio.ts",
     "research:precompute": "bun run research/precompute.ts",
-    "research:score": "bun run research/score-signals.ts"
+    "research:score": "bun run research/score-signals.ts",
+    "research:walk-forward": "bun run research/walk-forward.ts",
+    "research:freeze": "bun run research/freeze.ts",
+    "research:sealed": "bun run research/run-sealed-test.ts",
+    "research:paper": "bun run research/live-binance-paper.ts"
   }
 }
