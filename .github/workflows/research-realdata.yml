@@ -1,0 +1,39 @@
+name: research-realdata
+
+on:
+  push:
+    branches:
+      - research/replay-lab
+    paths:
+      - .github/workflows/research-realdata.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  btc-public-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download fixed BTC sample
+        run: bun run scripts/download-binance-klines.ts --symbol=BTCUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/btc.csv
+      - name: Momentum baseline
+        run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 | tee data/momentum.txt
+      - name: Random baseline
+        run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
+      - name: Walk-forward baseline
+        run: bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: btc-public-data-baselines
+          path: |
+            data/momentum.txt
+            data/random.txt
+            data/walk-forward.txt
+          retention-days: 14
