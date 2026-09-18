@@ -104,12 +104,34 @@ async function score(
 
 const cache = new JsonlSignalCache(cachePath);
 const rows: any[] = [];
+let usedNewEvaluations = 0;
+
+function scoreableCount(bars: MarketBar[], horizonBars: number) {
+  const start = defaultFeatureConfig.minHistoryBars;
+  if (start + horizonBars >= bars.length) return 0;
+  return Math.floor((bars.length - horizonBars - 1 - start) / decisionEveryBars) + 1;
+}
+
 for (const horizonBars of horizons) {
   for (const profile of profiles) {
     const raw = createReplayEvaluator(modelName, profile);
-    const evaluator = new CachedEvaluator(raw, cache, maxNewEvaluations - rows.reduce((s, x) => s + x.newEvaluations, 0));
-    const beforeNew = evaluator.newEvaluations;
+    const expectedFreshCalls = scoreableCount(split.train, horizonBars) + scoreableCount(split.validation, horizonBars);
+    const remaining = Math.max(0, maxNewEvaluations - usedNewEvaluations);
+    if (expectedFreshCalls > remaining && modelName === "jev") {
+      rows.push({
+        symbol,
+        horizonBars,
+        profile,
+        evaluatorNamespace: raw.name,
+        status: "budget-skipped",
+        expectedFreshCalls,
+        remainingBudget: remaining,
+      });
+      console.log(profile + " h=" + horizonBars + " · skipped, needs up to " + expectedFreshCalls + " fresh calls with " + remaining + " remaining");
+      continue;
+    }
 
+    const evaluator = new CachedEvaluator(raw, cache, remaining);
     const trainScore = await score(split.train, horizonBars, evaluator);
     const validationScore = await score(split.validation, horizonBars, evaluator);
 
@@ -128,9 +150,12 @@ for (const horizonBars of horizons) {
       train: trainScore,
       validation: validationScore,
       validationReplay: validationReplay.metrics,
-      newEvaluations: evaluator.newEvaluations - beforeNew,
+      status: "complete",
+      expectedFreshCalls,
+      newEvaluations: evaluator.newEvaluations,
       freshInputTokens: evaluator.newInputTokens,
     };
+    usedNewEvaluations += evaluator.newEvaluations;
     rows.push(row);
     console.log(
       profile + " h=" + horizonBars +
@@ -158,6 +183,9 @@ const summary = {
   modelName,
   horizons,
   profiles,
+  newEvaluationBudget: maxNewEvaluations,
+  usedNewEvaluations,
+  freshInputTokens: rows.reduce((s, x) => s + (x.freshInputTokens ?? 0), 0),
   rows,
 };
 
