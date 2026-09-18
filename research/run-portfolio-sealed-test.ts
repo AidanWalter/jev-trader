@@ -113,7 +113,7 @@ console.log("PORTFOLIO SEALED TEST");
 console.log(result.symbols.join(", "));
 console.log(new Date(result.startTs).toISOString() + " -> " + new Date(result.endTs).toISOString());
 console.log("P&L $" + result.pnl.toFixed(2) + " · return " + result.returnPct.toFixed(2) + "% · max DD " + result.maxDrawdownPct.toFixed(2) + "%");
-console.log("turnover " + result.turnover.toFixed(1) + "x · fills " + result.fills.length + " · fees $" + result.fees.toFixed(4) + " · borrow $" + result.borrowCost.toFixed(6));
+console.log("turnover " + result.turnover.toFixed(1) + "x · fills " + result.fills.length + " · fees $" + result.fees.toFixed(4) + " · borrow $" + result.borrowCost.toFixed(6) + " · funding net $" + result.fundingNet.toFixed(6));
 console.log("cache hits " + cache.hits + " · misses " + cache.misses + " · NEW evaluations " + evaluator.newEvaluations + " · fresh tokens " + evaluator.newInputTokens);
 
 const outPath = flag("out");
