@@ -35,6 +35,7 @@ const bars = syntheticBars();
 const evaluator = new MockReplayEvaluator();
 const result = await replayBars(bars, {
   evaluator,
+  policy: { minExpectedMoveCostMultiple: 0 },
   execution: { feeBps: 1, slippageBps: 0.5, spreadBpsFallback: 2, initialCash: 100 },
 });
 
