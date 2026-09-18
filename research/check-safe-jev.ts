@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BudgetedEvaluator } from "./paid-budget";
+import { BudgetedEvaluator, SpendBudgetLedger } from "./budget";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { choosePolicyAction } from "./policy";
 import { projectState } from "./profiles";
@@ -102,12 +102,14 @@ check("full policy still honors adverse-selection gate", fullMode.kind === "hold
 const dir = mkdtempSync(join(tmpdir(), "jev-safe-budget-"));
 try {
   const inner = new DummyEvaluator(900, 25);
-  const budgeted = new BudgetedEvaluator(inner, {
+  const ledger = new SpendBudgetLedger({
     maxRequests: 2,
     maxInputTokens: 2500,
-    reserveInputTokensPerRequest: 1000,
+    maxUsd: 1,
+    reserveTokensPerRequest: 1000,
     usdPerMTok: 0.042,
   });
+  const budgeted = new BudgetedEvaluator(inner, ledger);
   const cached = new CachedEvaluator(budgeted, new JsonlSignalCache(join(dir, "cache.jsonl")), 100);
 
   const results = await Promise.allSettled([
@@ -118,13 +120,13 @@ try {
   const fulfilled = results.filter((x) => x.status === "fulfilled").length;
   const rejected = results.filter((x) => x.status === "rejected").length;
   check("concurrent hard request cap allows exactly two unique paid calls", fulfilled === 2 && rejected === 1 && inner.calls === 2);
-  check("provider-token accounting remains below hard cap", budgeted.inputTokens === 1800 && budgeted.inputTokens <= 2500);
+  check("provider-token accounting remains below hard cap", ledger.snapshot().inputTokens === 1800 && ledger.snapshot().inputTokens <= 2500);
 
   const before = inner.calls;
   await cached.evaluate(feature(10));
   check("cache hit spends no additional request", inner.calls === before);
 
-  const snap = budgeted.snapshot();
+  const snap = ledger.snapshot();
   check("budget snapshot reports exact request count", snap.requestsStarted === 2 && snap.requestsCompleted === 2);
 } finally {
   rmSync(dir, { recursive: true, force: true });
