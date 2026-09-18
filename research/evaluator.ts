@@ -4,6 +4,22 @@ import { projectState, type InputProfile } from "./profiles";
 import type { Direction, FeatureState, JevSignal, Magnitude, SignalEvaluator } from "./types";
 
 export const SIGNAL_VERSION = "replay-signal-v4";
+export const DIRECTION_SIGNAL_VERSION = "replay-direction-v1";
+
+const DIRECTION_ONLY_QUESTIONS = {
+  direction: {
+    type: "choice",
+    instructions: {
+      question: "Over the next horizonBars, where is the future close relative to plus/minus directionThresholdBps from the current price?",
+      goal: "Return probabilities using only the supplied state.",
+    },
+    criteria: {
+      long: "Future close is more than directionThresholdBps above current price.",
+      flat: "Absolute future close return is at most directionThresholdBps.",
+      short: "Future close is more than directionThresholdBps below current price.",
+    },
+  },
+} as const;
 
 const QUESTIONS = {
   direction: {
@@ -58,6 +74,49 @@ function normalizeChoice<T extends string>(choice: string, probabilities: Record
     for (const label of labels) out[label] /= total;
   }
   return out;
+}
+
+export class JevDirectionReplayEvaluator implements SignalEvaluator {
+  readonly name: string;
+  private model;
+
+  constructor(
+    modelId = process.env.JEV_MODEL_ID ?? "jev-latest",
+    readonly profile: InputProfile = "lean",
+  ) {
+    this.name = `${modelId}:${DIRECTION_SIGNAL_VERSION}:${profile}`;
+    this.model = typeSafeAi.evaluationModel(modelId);
+  }
+
+  async evaluate(state: FeatureState): Promise<JevSignal> {
+    const t0 = performance.now();
+    const modelState = projectState(state, this.profile);
+    const r = await experimental_evaluate({
+      model: this.model,
+      state: modelState as any,
+      questions: DIRECTION_ONLY_QUESTIONS,
+      maxRetries: 0,
+    });
+    const d = r.answers.direction;
+    if (d?.type !== "choice") throw new Error("direction answer missing or invalid");
+    const dp = normalizeChoice(d.choice, d.probabilities, ["long", "flat", "short"] as const);
+
+    return {
+      version: DIRECTION_SIGNAL_VERSION,
+      decisionMode: "direction-only",
+      model: this.name,
+      direction: { choice: d.choice as Direction, probabilities: dp },
+      // Compatibility placeholders. The policy is explicitly prohibited from
+      // using these when decisionMode is direction-only.
+      magnitude: {
+        choice: "tiny",
+        probabilities: { tiny: 1, small: 0, medium: 0, large: 0 },
+      },
+      adverseSelection: 0,
+      latencyMs: performance.now() - t0,
+      inputTokens: r.usage?.inputTokens ?? 0,
+    };
+  }
 }
 
 export class JevReplayEvaluator implements SignalEvaluator {
@@ -240,6 +299,7 @@ export class RandomReplayEvaluator implements SignalEvaluator {
 
 export function createReplayEvaluator(name: string, profile: InputProfile = "full"): SignalEvaluator {
   if (name === "jev") return new JevReplayEvaluator(undefined, profile);
+  if (name === "jev-direction") return new JevDirectionReplayEvaluator(undefined, profile);
   if (name === "mock") return new MockReplayEvaluator();
   if (name === "momentum") return new MomentumReplayEvaluator();
   if (name === "random") return new RandomReplayEvaluator();
