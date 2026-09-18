@@ -1,6 +1,7 @@
 import { extname } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { loadBarsCsv, loadBarsJsonl } from "./csv";
+import { inferIntervalMs } from "./features";
 import { chronologicalSplit } from "./splits";
 import type { AssetKind, PolicyConfig } from "./types";
 
@@ -94,6 +95,7 @@ const freezeRecord = {
     symbol,
     kind,
     bars: bars.length,
+    intervalMs: inferIntervalMs(bars, Math.min(bars.length - 1, Math.max(1, Math.min(100, bars.length - 1)))),
     firstTs: bars[0]!.ts,
     lastTs: bars.at(-1)!.ts,
     trainBars: split.train.length,
