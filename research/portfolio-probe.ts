@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
+import { mapLimit } from "./concurrency";
 import { assertResearchDataQuality } from "./data-quality";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
@@ -22,6 +23,7 @@ if (!manifest) {
 }
 
 const modelName = flag("model", "jev")!;
+const concurrency = Math.max(1, Number(flag("concurrency", modelName === "jev" ? "4" : "8")));
 const horizons = (flag("horizons", "6,12") ?? "6,12")
   .split(",").map(Number).filter((x) => Number.isFinite(x) && x > 0);
 const profiles = (flag("profiles", "technical,path,full") ?? "technical,path,full")
@@ -133,20 +135,17 @@ for (const horizonBars of horizons) {
     }
 
     const evaluator = new CachedEvaluator(raw, cache, sample.length);
-    let tokenSum = 0;
-    let latencySum = 0;
-    const observed: any[] = [];
-    for (const row of sample) {
+    const observed = await mapLimit(sample, concurrency, async (row) => {
       const signal = await evaluator.evaluate(row.state);
-      tokenSum += signal.inputTokens;
-      latencySum += signal.latencyMs;
-      observed.push({
+      return {
         symbol: row.symbol,
         ts: row.state.ts,
         inputTokens: signal.inputTokens,
         latencyMs: signal.latencyMs,
-      });
-    }
+      };
+    });
+    const tokenSum = observed.reduce((s, x) => s + x.inputTokens, 0);
+    const latencySum = observed.reduce((s, x) => s + x.latencyMs, 0);
 
     usedNewEvaluations += evaluator.newEvaluations;
     freshInputTokens += evaluator.newInputTokens;
@@ -200,6 +199,7 @@ const summary = {
   decisionEveryBars,
   samplePerCell,
   maxNewEvaluations,
+  concurrency,
   usedNewEvaluations,
   freshInputTokens,
   actualProbeCostUsd: freshInputTokens / 1e6 * usdPerMTok,
