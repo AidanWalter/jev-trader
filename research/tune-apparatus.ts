@@ -61,12 +61,14 @@ const split = chronologicalSplit(bars);
 const ranges = chronologicalRanges(bars);
 const cache = new JsonlSignalCache(flag("cache", "data/jev-pilot-cache.jsonl")!);
 const outPath = flag("out", "data/apparatus-selection.json")!;
+const grid = flag("grid", "full")!;
 
-const edges = [0.04, 0.08, 0.12, 0.16];
-const confidences = [0.42, 0.48, 0.54, 0.60];
-const adverse = [0.55, 0.65, 0.75, 0.90];
-const exposures = [0.25, 0.50, 0.75, 1.00];
-const costMultiples = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
+const fast = grid === "fast";
+const edges = fast ? [0.08, 0.14] : [0.04, 0.08, 0.12, 0.16];
+const confidences = fast ? [0.48, 0.58] : [0.42, 0.48, 0.54, 0.60];
+const adverse = fast ? [0.65, 0.90] : [0.55, 0.65, 0.75, 0.90];
+const exposures = fast ? [0.50, 1.00] : [0.25, 0.50, 0.75, 1.00];
+const costMultiples = fast ? [0.5, 1.25] : [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
 
 function objective(m: ReplayMetrics) {
   const sharpe = m.sharpe ?? 0;
@@ -175,6 +177,7 @@ const selection = {
   features: pilot.features,
   sealedTestBars: split.test.length,
   chosen,
+  grid,
   candidates,
 };
 
