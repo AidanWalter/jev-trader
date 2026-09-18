@@ -39,6 +39,10 @@ on:
         description: Initial maximum absolute exposure per asset
         required: true
         default: "0.5"
+      concurrency:
+        description: Maximum concurrent Jev API calls
+        required: true
+        default: "4"
       max_new_evals:
         description: Hard cap across all fresh Jev calls
         required: true
@@ -108,6 +112,7 @@ jobs:
         run: |
           bun run research/portfolio-pilot.ts data/market/universe/universe.json \
             --model=jev \
+            --concurrency="${{ inputs.concurrency }}" \
             --horizons="${{ inputs.horizons }}" \
             --profiles="${{ inputs.profiles }}" \
             --decision-every="${{ inputs.decision_every }}" \
