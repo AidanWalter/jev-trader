@@ -42,7 +42,7 @@ jobs:
             --out=data/mock-probe-summary.json
           test -s data/mock-probe-summary.json
       - name: Pilot matrix smoke test with mock evaluator
-        run: bun run research/pilot.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=mock --horizons=6,12 --profiles=full --decision-every=8 --max-new-evals=100000 --cache=data/mock-pilot-cache.jsonl --out=data/mock-pilot-summary.json
+        run: bun run research/pilot.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --allow-short=false --model=mock --horizons=6,12 --profiles=full --decision-every=8 --max-new-evals=100000 --cache=data/mock-pilot-cache.jsonl --out=data/mock-pilot-summary.json
       - name: Mock apparatus selection
         run: |
           bun run research/tune-apparatus.ts data/market/btc.csv \
@@ -56,6 +56,7 @@ jobs:
             --policy=data/mock-apparatus-selection.json \
             --symbol=BTCUSDT \
             --kind=spot \
+            --allow-short=false \
             --allow-unqualified=true \
             --out=data/mock-apparatus-freeze.json
       - name: Mock sealed preflight
@@ -144,6 +145,7 @@ jobs:
             --top-n=2 \
             --max-gross=1 \
             --max-asset=0.5 \
+            --allow-short=false \
             --cache=data/mock-portfolio-pilot-cache.jsonl \
             --out=data/mock-portfolio-pilot-summary.json
       - name: Mock multi-asset apparatus selection
