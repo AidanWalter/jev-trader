@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { BudgetedEvaluator, SpendBudgetLedger } from "./budget";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { choosePolicyAction } from "./policy";
+import { DIRECTION_ONLY_QUESTIONS } from "./evaluator";
 import { projectState } from "./profiles";
 import type { FeatureState, JevSignal, SignalEvaluator } from "./types";
 
@@ -72,6 +73,8 @@ check("lean profile keeps direction-relevant returns", "returnsBps" in lean && "
 check("lean profile keeps compact market context", "marketContext" in lean);
 check("lean profile removes raw price and timestamp", !("price" in lean) && !("ts" in lean));
 check("lean profile removes recent path array", !("recentReturnsBps" in lean));
+check("lean profile stays under 1 KB of JSON state", JSON.stringify(lean).length < 1024);
+check("direction-only Jev mode contains exactly one question", Object.keys(DIRECTION_ONLY_QUESTIONS).join(",") === "direction");
 
 const signal = await new DummyEvaluator().evaluate(feature());
 const directionOnly = choosePolicyAction(signal, 0, {
