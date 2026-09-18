@@ -6,6 +6,8 @@ on:
       - research/replay-lab
     paths:
       - .github/workflows/research-realdata.yml
+      - research/**
+      - scripts/download-binance-klines.ts
   workflow_dispatch:
 
 permissions:
@@ -29,10 +31,6 @@ jobs:
         run: bun run research/run.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=random --horizon=12 --decision-every=4 | tee data/random.txt
       - name: Walk-forward baseline
         run: bun run research/walk-forward.ts data/market/btc.csv --symbol=BTCUSDT --kind=spot --model=momentum --horizon=12 --decision-every=4 --train-bars=1000 --validation-bars=400 --step-bars=400 | tee data/walk-forward.txt
-      - name: Download synchronized BTC ETH SOL universe
-        run: bun run scripts/download-binance-universe.ts --symbols=BTCUSDT,ETHUSDT,SOLUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out-dir=data/market/universe --manifest=data/market/universe/universe.json
-      - name: Shared-bankroll momentum portfolio
-        run: bun run research/run-portfolio.ts data/market/universe/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio.txt
       - uses: actions/upload-artifact@v4
         with:
           name: btc-public-data-baselines
@@ -40,5 +38,66 @@ jobs:
             data/momentum.txt
             data/random.txt
             data/walk-forward.txt
-            data/portfolio.txt
           retention-days: 14
+
+  crypto-portfolio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download synchronized crypto sample
+        run: |
+          bun run scripts/download-binance-klines.ts --symbol=BTCUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/btc.csv
+          bun run scripts/download-binance-klines.ts --symbol=ETHUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/eth.csv
+          bun run scripts/download-binance-klines.ts --symbol=SOLUSDT --interval=15m --start=2025-01-01 --end=2025-02-01 --out=data/market/sol.csv
+      - name: Build universe manifest
+        run: |
+          cat > data/market/universe.json <<'JSON'
+          {
+            "name": "btc-eth-sol-15m-2025-01",
+            "assets": [
+              { "file": "btc.csv", "symbol": "BTCUSDT", "kind": "spot", "spreadBps": 4 },
+              { "file": "eth.csv", "symbol": "ETHUSDT", "kind": "spot", "spreadBps": 4 },
+              { "file": "sol.csv", "symbol": "SOLUSDT", "kind": "spot", "spreadBps": 5 }
+            ]
+          }
+          JSON
+      - name: Momentum portfolio
+        run: bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
+      - name: Random portfolio
+        run: bun run research/run-portfolio.ts data/market/universe.json --model=random --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-random.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crypto-portfolio-baselines
+          path: |
+            data/portfolio-momentum.txt
+            data/portfolio-random.txt
+          retention-days: 14
+
+  forward-paper-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: One-cycle public-data paper initialization
+        run: bun run research/live-binance-paper.ts --symbol=BTCUSDT --interval=5m --model=mock --cycles=1 --state=data/paper-state.json --events=data/paper-events.jsonl
+      - name: Validate persistent paper state
+        run: |
+          test -s data/paper-state.json
+          test -s data/paper-events.jsonl
+          grep -q '"version": "binance-paper-v1"' data/paper-state.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forward-paper-smoke
+          path: |
+            data/paper-state.json
+            data/paper-events.jsonl
+          retention-days: 7
