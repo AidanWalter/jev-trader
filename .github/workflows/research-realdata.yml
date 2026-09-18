@@ -131,6 +131,45 @@ jobs:
             ]
           }
           JSON
+      - name: Mock multi-asset pilot
+        run: |
+          bun run research/portfolio-pilot.ts data/market/universe.json \
+            --model=mock \
+            --horizons=6,12 \
+            --profiles=full \
+            --decision-every=8 \
+            --max-new-evals=100000 \
+            --top-n=2 \
+            --max-gross=1 \
+            --max-asset=0.5 \
+            --cache=data/mock-portfolio-pilot-cache.jsonl \
+            --out=data/mock-portfolio-pilot-summary.json
+      - name: Mock multi-asset apparatus selection
+        run: |
+          bun run research/tune-portfolio-apparatus.ts data/market/universe.json \
+            --pilot=data/mock-portfolio-pilot-summary.json \
+            --cache=data/mock-portfolio-pilot-cache.jsonl \
+            --grid=fast \
+            --out=data/mock-portfolio-apparatus-selection.json
+      - name: Freeze mock multi-asset apparatus
+        run: |
+          bun run research/freeze-portfolio.ts data/market/universe.json \
+            --selection=data/mock-portfolio-apparatus-selection.json \
+            --allow-unqualified=true \
+            --out=data/mock-portfolio-apparatus-freeze.json
+      - name: Mock multi-asset sealed preflight
+        run: |
+          bun run research/portfolio-sealed-preflight.ts data/mock-portfolio-apparatus-freeze.json \
+            --manifest=data/market/universe.json \
+            --cache=data/mock-portfolio-pilot-cache.jsonl | tee data/mock-portfolio-sealed-preflight.txt
+      - name: Mock multi-asset sealed execution
+        run: |
+          set -o pipefail
+          bun run research/run-portfolio-sealed-test.ts data/mock-portfolio-apparatus-freeze.json \
+            --manifest=data/market/universe.json \
+            --cache=data/mock-portfolio-pilot-cache.jsonl \
+            --max-new-evals=100000 \
+            --out=data/mock-portfolio-sealed-result.json | tee data/mock-portfolio-sealed-output.txt
       - name: Momentum portfolio
         run: set -o pipefail; bun run research/run-portfolio.ts data/market/universe.json --model=momentum --horizon=12 --decision-every=4 --top-n=2 --max-gross=1 --max-asset=0.5 | tee data/portfolio-momentum.txt
       - name: Random portfolio
@@ -141,6 +180,12 @@ jobs:
           path: |
             data/portfolio-momentum.txt
             data/portfolio-random.txt
+            data/mock-portfolio-pilot-summary.json
+            data/mock-portfolio-apparatus-selection.json
+            data/mock-portfolio-apparatus-freeze.json
+            data/mock-portfolio-sealed-preflight.txt
+            data/mock-portfolio-sealed-output.txt
+            data/mock-portfolio-sealed-result.json
           retention-days: 14
 
   forward-paper-smoke:
