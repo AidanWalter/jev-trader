@@ -18,6 +18,11 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun --watch run src/index.ts"
+    "dev": "bun --watch run src/index.ts",
+    "research:check": "bun run research/check-replay.ts",
+    "research:replay": "bun run research/run.ts",
+    "research:tune": "bun run research/tune.ts",
+    "data:binance": "bun run scripts/download-binance-klines.ts",
+    "data:stooq": "bun run scripts/download-stooq.ts"
   }
 }
