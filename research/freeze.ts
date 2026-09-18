@@ -18,6 +18,40 @@ interface SelectedPolicyFile {
   validationMetrics?: unknown;
 }
 
+interface ApparatusSelectionFile {
+  version: "apparatus-selection-v1";
+  decisionEveryBars: number;
+  execution: { spreadBps: number; feeBps: number; slippageBps: number };
+  chosen: {
+    horizonBars: number;
+    profile: string;
+    evaluatorNamespace: string;
+    policy: PolicyConfig;
+    trainMetrics?: unknown;
+    validationMetrics?: unknown;
+  };
+}
+
+function normalizeSelection(raw: SelectedPolicyFile | ApparatusSelectionFile): SelectedPolicyFile {
+  if ((raw as ApparatusSelectionFile).version === "apparatus-selection-v1") {
+    const s = raw as ApparatusSelectionFile;
+    return {
+      evaluatorKind: "jev",
+      evaluatorNamespace: s.chosen.evaluatorNamespace,
+      profile: s.chosen.profile,
+      horizonBars: s.chosen.horizonBars,
+      decisionEveryBars: s.decisionEveryBars,
+      spreadBps: s.execution.spreadBps,
+      feeBps: s.execution.feeBps,
+      slippageBps: s.execution.slippageBps,
+      policy: s.chosen.policy,
+      trainMetrics: s.chosen.trainMetrics,
+      validationMetrics: s.chosen.validationMetrics,
+    };
+  }
+  return raw as SelectedPolicyFile;
+}
+
 const args = process.argv.slice(2);
 const flag = (name: string, fallback?: string) => {
   const prefix = "--" + name + "=";
@@ -35,7 +69,7 @@ if (!file || !policyFile) {
 const symbol = flag("symbol", "UNKNOWN")!;
 const kind = flag("kind", "spot") as AssetKind;
 const out = flag("out", "data/apparatus-freeze.json")!;
-const selected = JSON.parse(readFileSync(policyFile, "utf8")) as SelectedPolicyFile;
+const selected = normalizeSelection(JSON.parse(readFileSync(policyFile, "utf8")) as SelectedPolicyFile | ApparatusSelectionFile);
 
 const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
