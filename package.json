@@ -39,6 +39,7 @@
     "research:pilot": "bun run research/pilot.ts",
     "research:tune-apparatus": "bun run research/tune-apparatus.ts",
     "research:sealed-preflight": "bun run research/sealed-preflight.ts",
-    "research:paper-frozen": "bun run research/live-frozen-binance-paper.ts"
+    "research:paper-frozen": "bun run research/live-frozen-binance-paper.ts",
+    "research:jev-probe": "bun run research/jev-probe.ts"
   }
 }
