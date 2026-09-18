@@ -1,0 +1,76 @@
+name: jev-spend-audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/jev-spend-audit.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Download first qualified experiment final cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-sealed-autostart-35386077427
+          path: audit/gen1
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35386077427
+      - name: Download fresh-window experiment cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-portfolio-fresh-window-35387104158
+          path: audit/fresh
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35387104158
+      - name: Download generation-two spot cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: audit/g2spot
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Download partial generation-two perp cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gen2-perp-jev-pilot-35388518829
+          path: audit/g2perp
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388518829
+      - name: Download standalone concurrency-check cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-concurrency-check-35389318272
+          path: audit/concurrency
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389318272
+      - name: Sum cached input tokens and estimated Jev spend
+        run: |
+          bun run research/sum-cache-cost.ts audit | tee audit/spend.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jev-spend-audit-${{ github.run_id }}
+          path: audit/spend.txt
+          retention-days: 30
