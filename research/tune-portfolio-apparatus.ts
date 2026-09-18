@@ -83,9 +83,17 @@ const minChanges = fast ? [0.08, 0.18] : [0.05, 0.12, 0.20];
 const sizeThresholdSets: [number, number, number][] = fast
   ? [[0.08, 0.20, 0.36], [0.12, 0.26, 0.44]]
   : [[0.06, 0.16, 0.30], [0.10, 0.22, 0.38], [0.14, 0.28, 0.46]];
-const cadenceCandidates = [...new Set(
-  (fast ? [1, 2] : [1, 2, 3, 4]).map((m) => pilot.decisionEveryBars * m)
-)];
+const cadenceOverride = flag("cadences");
+const cadenceCandidates = cadenceOverride
+  ? [...new Set(
+      cadenceOverride
+        .split(",")
+        .map((x) => Math.max(1, Number(x.trim())))
+        .filter((x) => Number.isFinite(x)),
+    )]
+  : [...new Set(
+      (fast ? [1, 2] : [1, 2, 3, 4]).map((m) => pilot.decisionEveryBars * m)
+    )];
 
 function objective(r: PortfolioResult) {
   const ddPenalty = Math.abs(Math.min(0, r.maxDrawdownPct)) * 0.6;
