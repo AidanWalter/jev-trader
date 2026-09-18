@@ -37,7 +37,7 @@ interface FreezeRecord {
 }
 
 interface PaperState {
-  version: "frozen-binance-paper-v1";
+  version: "frozen-binance-paper-v2";
   freezeSha256: string;
   evaluatorNamespace: string;
   symbol: string;
@@ -45,6 +45,7 @@ interface PaperState {
   cash: number;
   quantity: number;
   fees: number;
+  borrowCost: number;
   lastOpenTs: number;
   pendingTarget: number | null;
   lastDecisionTs: number | null;
@@ -112,7 +113,7 @@ function loadState(): PaperState | null {
   if (!existsSync(statePath)) return null;
   const s = JSON.parse(readFileSync(statePath, "utf8")) as PaperState;
   if (
-    s.version !== "frozen-binance-paper-v1" ||
+    s.version !== "frozen-binance-paper-v2" ||
     s.freezeSha256 !== freezeSha256 ||
     s.evaluatorNamespace !== freeze.evaluator.namespace ||
     s.symbol !== symbol ||
@@ -158,6 +159,30 @@ async function fetchBars(limit = 250): Promise<{ closed: MarketBar[]; current: M
     closed: parsed.slice(0, -1).filter((x) => x.closeTime <= now).map((x) => x.bar),
     current: currentRow.bar,
   };
+}
+
+function accrueCarryingCosts(state: PaperState, current: MarketBar) {
+  if (state.quantity >= 0 || current.ts <= state.lastOpenTs) return 0;
+  const days = (current.ts - state.lastOpenTs) / 86_400_000;
+  const cost =
+    Math.abs(state.quantity * current.open) *
+    freeze.execution.shortBorrowBpsPerDay / 10_000 *
+    days;
+  if (cost > 0) {
+    state.cash -= cost;
+    state.borrowCost += cost;
+    writeEvent({
+      type: "borrow-cost",
+      at: Date.now(),
+      barTs: current.ts,
+      quantity: state.quantity,
+      price: current.open,
+      days,
+      cost,
+      cumulativeBorrowCost: state.borrowCost,
+    });
+  }
+  return cost;
 }
 
 function executePending(state: PaperState, current: MarketBar) {
@@ -239,7 +264,7 @@ while (cycles === 0 || cycle < cycles) {
     const { closed, current } = await fetchBars();
     if (!state) {
       state = {
-        version: "frozen-binance-paper-v1",
+        version: "frozen-binance-paper-v2",
         freezeSha256,
         evaluatorNamespace: freeze.evaluator.namespace,
         symbol,
@@ -247,6 +272,7 @@ while (cycles === 0 || cycle < cycles) {
         cash: freeze.execution.initialCash,
         quantity: 0,
         fees: 0,
+        borrowCost: 0,
         lastOpenTs: current.ts,
         pendingTarget: null,
         lastDecisionTs: null,
@@ -265,6 +291,7 @@ while (cycles === 0 || cycle < cycles) {
       saveState(state);
       console.log("initialized frozen " + symbol + " " + interval + " · equity $" + equity(state, current.open).toFixed(2));
     } else if (current.ts > state.lastOpenTs) {
+      const borrow = accrueCarryingCosts(state, current);
       const fill = executePending(state, current);
       state.lastOpenTs = current.ts;
       state.barsSinceDecision++;
@@ -276,7 +303,8 @@ while (cycles === 0 || cycle < cycles) {
         " · equity $" + equity(state, current.open).toFixed(2) +
         " · exposure " + exposure(state, current.open).toFixed(3) +
         (d ? " · next target " + d.target.toFixed(3) : " · no decision this bar") +
-        (fill ? " · filled " + fill.side + " $" + fill.notional.toFixed(2) : "")
+        (fill ? " · filled " + fill.side + " $" + fill.notional.toFixed(2) : "") +
+        (borrow > 0 ? " · borrow $" + borrow.toFixed(6) : "")
       );
     }
   } catch (e) {
@@ -294,6 +322,8 @@ if (state) {
     " · cache hits " + cache.hits +
     " · misses " + cache.misses +
     " · new " + evaluator.newEvaluations +
-    " · fresh tokens " + evaluator.newInputTokens
+    " · fresh tokens " + evaluator.newInputTokens +
+    " · fees $" + state.fees.toFixed(4) +
+    " · borrow $" + state.borrowCost.toFixed(6)
   );
 }
