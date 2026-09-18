@@ -31,6 +31,8 @@ jobs:
               "jev-direction-sealed.yml",
           }
           failures = []
+          disabled_guard = "if: $" + "{{ false }}"
+          duplicate_disabled_guard = disabled_guard + "\n    if:"
 
           for path in sorted(root.glob("*.y*ml")):
               if path.name == "jev-workflow-safety.yml":
@@ -39,7 +41,7 @@ jobs:
               if "TYPESAFE_AI_API_KEY" not in text:
                   continue
 
-              if "if: ${{ false }}\n    if:" in text:
+              if duplicate_disabled_guard in text:
                   failures.append(f"{path.name}: duplicate job-level if after hard-disable")
 
               if path.name in allowed:
@@ -56,7 +58,7 @@ jobs:
                   if re.search(r"^    env:\n      TYPESAFE_AI_API_KEY:", text, re.M):
                       failures.append(f"{path.name}: Jev secret exposed at job scope")
               else:
-                  if "if: ${{ false }}" not in text:
+                  if disabled_guard not in text:
                       failures.append(f"{path.name}: legacy paid workflow is not hard-disabled")
 
           if failures:
