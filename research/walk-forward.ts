@@ -4,7 +4,7 @@ import { loadBarsCsv, loadBarsJsonl } from "./csv";
 import { createReplayEvaluator } from "./evaluator";
 import type { InputProfile } from "./profiles";
 import { replayBars } from "./replay";
-import { chronologicalSplit, walkForwardSplits } from "./splits";
+import { chronologicalRanges, chronologicalSplit, walkForwardRanges } from "./splits";
 import { defaultPolicyConfig } from "./policy";
 import type { AssetKind, PolicyConfig, ReplayMetrics } from "./types";
 
@@ -38,14 +38,16 @@ const bars = extname(file).toLowerCase() === ".jsonl"
   ? loadBarsJsonl(file)
   : loadBarsCsv(file, { symbol, kind, defaultSpreadBps: spreadBps });
 const split = chronologicalSplit(bars);
-const dev = [...split.train, ...split.validation];
+const ranges = chronologicalRanges(bars);
+const devEnd = ranges.validation.end;
+const devLength = devEnd - ranges.train.start;
 
-const defaultTrain = Math.max(200, Math.floor(dev.length * 0.45));
-const defaultValidation = Math.max(100, Math.floor(dev.length * 0.15));
+const defaultTrain = Math.max(200, Math.floor(devLength * 0.45));
+const defaultValidation = Math.max(100, Math.floor(devLength * 0.15));
 const trainBars = Math.max(60, Number(flag("train-bars", String(defaultTrain))));
 const validationBars = Math.max(30, Number(flag("validation-bars", String(defaultValidation))));
 const stepBars = Math.max(1, Number(flag("step-bars", String(validationBars))));
-const folds = walkForwardSplits(dev, trainBars, validationBars, stepBars);
+const folds = walkForwardRanges(bars.slice(0, devEnd), trainBars, validationBars, stepBars);
 if (!folds.length) throw new Error("no walk-forward folds; reduce --train-bars or --validation-bars");
 
 function objective(m: ReplayMetrics) {
@@ -91,20 +93,24 @@ const results: {
 for (const fold of folds) {
   let best: { policy: PolicyConfig; metrics: ReplayMetrics; score: number } | null = null;
   for (const policy of policyGrid) {
-    const r = await replayBars(fold.train, {
+    const r = await replayBars(bars, {
       evaluator,
       policy,
       features: { horizonBars },
+      startIndex: Math.max(50, fold.train.start),
+      endIndex: fold.train.end - 2,
       decisionEveryBars,
       execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
     });
     const score = objective(r.metrics);
     if (!best || score > best.score) best = { policy, metrics: r.metrics, score };
   }
-  const validation = await replayBars(fold.validation, {
+  const validation = await replayBars(bars, {
     evaluator,
     policy: best!.policy,
     features: { horizonBars },
+    startIndex: fold.validation.start,
+    endIndex: fold.validation.end - 2,
     decisionEveryBars,
     execution: { feeBps, slippageBps, spreadBpsFallback: spreadBps },
   });
