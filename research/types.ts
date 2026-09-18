@@ -86,6 +86,8 @@ export interface FeatureConfig {
   directionThresholdSpreadMultiple: number;
   /** Absolute lower bound for the economically meaningful move threshold. */
   directionThresholdBpsFloor: number;
+  /** Per-round-trip fixed overhead added to the current asset spread, typically fees plus slippage. */
+  directionThresholdFixedCostBps: number;
   recentPoints: number;
 }
 
