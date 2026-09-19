@@ -6,6 +6,7 @@ import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { choosePolicyAction } from "./policy";
 import { DIRECTION_ONLY_QUESTIONS } from "./evaluator";
 import { projectState } from "./profiles";
+import { jevSampleId, nestedJevSample } from "./jev-sampling";
 import type { FeatureState, JevSignal, SignalEvaluator } from "./types";
 
 function feature(ts = 1): FeatureState {
@@ -75,6 +76,21 @@ check("lean profile removes raw price and timestamp", !("price" in lean) && !("t
 check("lean profile removes recent path array", !("recentReturnsBps" in lean));
 check("lean profile stays under 1 KB of JSON state", JSON.stringify(lean).length < 1024);
 check("direction-only Jev mode contains exactly one question", Object.keys(DIRECTION_ONLY_QUESTIONS).join(",") === "direction");
+
+const sampleRows = ["BTCUSDT", "ETHUSDT", "SOLUSDT"].flatMap((symbol, si) =>
+  Array.from({ length: 120 }, (_, i) => ({
+    state: {
+      symbol,
+      ts: Date.UTC(2024, 0, 1) + (i * 3 + si) * 3_600_000,
+    },
+  }))
+);
+const sample12 = nestedJevSample(sampleRows, 12, 4).map(jevSampleId);
+const sample48 = nestedJevSample(sampleRows, 48, 4).map(jevSampleId);
+const sample240 = nestedJevSample(sampleRows, 240, 4).map(jevSampleId);
+check("12-state paid canary is exact prefix of 48-state expansion", JSON.stringify(sample12) === JSON.stringify(sample48.slice(0, 12)));
+check("48-state expansion is exact prefix of 240-state sample", JSON.stringify(sample48) === JSON.stringify(sample240.slice(0, 48)));
+check("12-state canary covers all three symbols", new Set(sample12.map((x) => x.split(":")[0])).size === 3);
 
 const signal = await new DummyEvaluator().evaluate(feature());
 const directionOnly = choosePolicyAction(signal, 0, {
