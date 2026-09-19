@@ -27,6 +27,7 @@ const profile = flag("profile", "lean") as InputProfile;
 const decisionEveryBars = Math.max(1, Number(flag("decision-every", "8")));
 const sampleCount = Math.max(1, Number(flag("sample", "12")));
 const maxRequests = Math.max(0, Number(flag("max-requests", String(sampleCount))));
+const minCacheHits = Math.max(0, Number(flag("min-cache-hits", "0")));
 const maxInputTokens = Math.max(0, Number(flag("max-input-tokens", "30000")));
 const reserveInputTokensPerRequest = Math.max(1, Number(flag("reserve-input-tokens", "2000")));
 const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
@@ -41,9 +42,6 @@ const feeBps = Number(flag("fee-bps", "4"));
 const slippageBps = Number(flag("slippage-bps", "1"));
 const spreadBps = Number(flag("spread-bps", "4"));
 
-if (sampleCount > maxRequests) {
-  throw new Error("sample count exceeds the hard request cap");
-}
 const dollarTokenCeiling = Math.floor(maxUsd / usdPerMTok * 1_000_000);
 const effectiveTokenCeiling = Math.min(maxInputTokens, dollarTokenCeiling);
 if (maxRequests * reserveInputTokensPerRequest > effectiveTokenCeiling) {
@@ -95,6 +93,22 @@ if (!eligibleRows.length) {
 const sample = nestedJevSample(eligibleRows, sampleCount, 4);
 
 const raw = createReplayEvaluator("jev-direction", profile);
+const cache = new JsonlSignalCache(cachePath);
+const preCachedSampleStates = sample.filter((row) => cache.has(raw.name, row.state)).length;
+const freshStatesRequired = sample.length - preCachedSampleStates;
+if (preCachedSampleStates < minCacheHits) {
+  throw new Error(
+    "paid stage expected at least " + minCacheHits +
+    " cached selected states but found " + preCachedSampleStates
+  );
+}
+if (freshStatesRequired > maxRequests) {
+  throw new Error(
+    "selected sample requires " + freshStatesRequired +
+    " fresh calls but hard request cap is " + maxRequests
+  );
+}
+
 const ledger = new SpendBudgetLedger({
   maxRequests,
   maxInputTokens,
@@ -103,7 +117,6 @@ const ledger = new SpendBudgetLedger({
   reserveTokensPerRequest: reserveInputTokensPerRequest,
 });
 const budgeted = new BudgetedEvaluator(raw, ledger);
-const cache = new JsonlSignalCache(cachePath);
 const evaluator = new CachedEvaluator(budgeted, cache, maxRequests);
 
 const labels: Direction[] = ["long", "flat", "short"];
@@ -203,6 +216,8 @@ const result = {
   decisionEveryBars,
   trainOnly: true,
   sampleCount,
+  preCachedSampleStates,
+  freshStatesRequired,
   sampleStateIds: sample.map(jevSampleId),
   sampling: {
     method: "nested-symbol-time-quartile-v1",
@@ -247,6 +262,11 @@ mkdirSync(outPath.includes("/") ? outPath.slice(0, outPath.lastIndexOf("/")) : "
 writeFileSync(outPath, JSON.stringify(result, null, 2) + "\n");
 
 console.log("SAFE JEV DIRECTION PROBE");
+console.log(
+  "sample states " + sample.length +
+  " · pre-cached " + preCachedSampleStates +
+  " · fresh required " + freshStatesRequired
+);
 console.log("requests started " + ledger.snapshot().requestsStarted + "/" + maxRequests);
 console.log("provider-reported input tokens " + ledger.snapshot().inputTokens + "/" + maxInputTokens);
 console.log("estimated cost from reported tokens $" + ledger.snapshot().estimatedUsd.toFixed(6));
