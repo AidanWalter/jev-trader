@@ -36,7 +36,7 @@ Workflow: `jev-direction-sample`.
 
 This stage requires the successful canary run ID plus explicit confirmation that the TypeSafe dashboard matched the canary artifact. Sampling is deterministic and nested, so the first 12 states are the canary states and are cache hits rather than repaid requests.
 
-Hard envelope: at most 240 fresh requests, at most 500,000 input tokens, 2,000-token reservation per request, hard ledger ceiling $0.025, concurrency 1.
+The 12 canary states are an exact nested prefix and must already be cached. Hard envelope for this stage: at most 228 fresh requests, at most 456,000 input tokens, 2,000-token reservation per request, hard ledger ceiling $0.020, concurrency 1. If at least 12 selected states are not cache hits, the stage refuses to start.
 
 The next stage is blocked unless the sample still averages no more than 1,600 input tokens/request, has Brier score below the three-class uniform benchmark, produces at least 40 non-flat calls, and contains a confidence/edge subset with at least 30 observations and more than 3 cost-adjusted bps per state.
 
@@ -50,7 +50,7 @@ This stage requires the successful 240-state sample run ID, explicit dashboard v
 
 Only one Jev apparatus is filled: `jev-direction`, `lean`, horizon 8, base decision cadence 8. The already-paid 240 nested states are reused. There is no Jev profile × horizon sweep.
 
-Hard envelope: at most 7,000 fresh requests, at most 14,000,000 input tokens, 2,000-token reservation per request, hard ledger ceiling $0.60, concurrency 1.
+The 240 sampled states are a nested subset of the fixed 6,996-state development apparatus and must already be cached. Hard envelope for this stage: at most 6,756 fresh requests, at most 13,512,000 input tokens, 2,000-token reservation per request, hard ledger ceiling $0.57, concurrency 1. The pilot counts missing states before calling Jev and refuses the cell if more than 6,756 are missing.
 
 After caching, all policy tuning is zero-cost deterministic replay. The tuner is explicitly direction-only. A freeze is produced only if the apparatus passes nominal validation, 1.5x and 2x cost stress, minimum fill count, and every chronological validation segment. A second independent four-segment audit requires all four segments positive.
 
@@ -72,7 +72,7 @@ The successful sealed artifact is locked to the development run so the same seal
 
 ## Maximum planned exposure
 
-The nominal workflow ceilings sum to $0.7165: $0.0015 canary + $0.025 sample + $0.60 development + $0.09 sealed.
+The nominal workflow ceilings sum to $0.6815: $0.0015 canary + $0.020 sample + $0.57 development + $0.09 sealed.
 
 Those are hard repository-side ceilings, not estimates of expected spend. The process also requires manual provider-dashboard reconciliation after the canary, sample, and development stages. If TypeSafe usage disagrees materially with the artifact, stop immediately and do not proceed.
 
