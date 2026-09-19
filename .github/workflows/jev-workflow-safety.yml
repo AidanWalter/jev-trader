@@ -28,6 +28,7 @@ jobs:
               "jev-direction-canary.yml",
               "jev-direction-sample-48.yml",
               "jev-direction-sample.yml",
+              "jev-direction-sample-1000.yml",
               "jev-direction-development.yml",
               "jev-direction-sealed.yml",
           }
@@ -49,12 +50,18 @@ jobs:
                   "--max-input-tokens=384000", "--reserve-input-tokens=2000",
                   "--max-usd=0.017", "--concurrency=1",
               ],
+              "jev-direction-sample-1000.yml": [
+                  "--horizon=8", "--profile=lean", "--decision-every=8",
+                  "--sample=1000", "--min-cache-hits=240", "--max-requests=760",
+                  "--max-input-tokens=1520000", "--reserve-input-tokens=2000",
+                  "--max-usd=0.065", "--concurrency=1",
+              ],
               "jev-direction-development.yml": [
                   "--model=jev-direction", "--horizons=8", "--profiles=lean",
                   "--decision-every=8", "--direction-only=true",
-                  "--max-new-evals=6756", "--max-paid-requests=6756",
-                  "--max-input-tokens=13512000", "--reserve-tokens-per-request=2000",
-                  "--max-usd=0.57", "--concurrency=1",
+                  "--max-new-evals=5996", "--max-paid-requests=5996",
+                  "--max-input-tokens=11992000", "--reserve-tokens-per-request=2000",
+                  "--max-usd=0.505", "--concurrency=1",
               ],
               "jev-direction-sealed.yml": [
                   "--max-new-evals=1000", "--max-paid-requests=1000",
