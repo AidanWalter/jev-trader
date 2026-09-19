@@ -22,6 +22,23 @@ on:
         required: true
         type: boolean
         default: false
+      resume_run_id:
+        description: Optional failed jev-direction-sample-1000 run ID to resume from its partial cache
+        required: false
+        default: ""
+      resume_dashboard_verified:
+        description: I checked TypeSafe billing for the failed attempt before resuming
+        required: false
+        type: boolean
+        default: false
+      resume_dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the failed attempt
+        required: false
+        default: "0"
+      resume_dashboard_input_token_delta:
+        description: Exact TypeSafe input-token increase caused by the failed attempt
+        required: false
+        default: "0"
 
 permissions:
   contents: read
@@ -117,6 +134,51 @@ jobs:
           cp "$RESULT" data/sample1000/sample240.json
           cp "$REFERENCE_CACHE" data/sample1000/reference-full-jev-cache.jsonl
 
+      - name: Download optional failed-stage partial cache
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-sample1000-failed-${{ inputs.resume_run_id }}
+          path: resume
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Restore partial cache and compute remaining lifetime stage budget
+        run: |
+          set -euo pipefail
+          MAX_REQ=760
+          MAX_TOK=1520000
+          USED_REQ=0
+          USED_TOK=0
+          if [ -n "${{ inputs.resume_run_id }}" ]; then
+            if [ "${{ inputs.resume_dashboard_verified }}" != "true" ]; then
+              echo "Resume requires explicit TypeSafe dashboard verification."
+              exit 1
+            fi
+            USED_REQ="${{ inputs.resume_dashboard_request_delta }}"
+            USED_TOK="${{ inputs.resume_dashboard_input_token_delta }}"
+            [[ "$USED_REQ" =~ ^[0-9]+$ ]]
+            [[ "$USED_TOK" =~ ^[0-9]+$ ]]
+            if [ "$USED_REQ" -gt "$MAX_REQ" ] || [ "$USED_TOK" -gt "$MAX_TOK" ]; then
+              echo "Failed attempt already exceeded the lifetime 1000-state cap."
+              exit 1
+            fi
+            PARTIAL="$(find resume -type f -name 'jev-direction-cache.jsonl' -print -quit)"
+            test -n "$PARTIAL"
+            cp "$PARTIAL" data/sample1000/jev-direction-cache.jsonl
+          fi
+          REM_REQ=$((MAX_REQ - USED_REQ))
+          REM_TOK=$((MAX_TOK - USED_TOK))
+          if [ "$REM_REQ" -le 0 ] || [ "$REM_TOK" -lt 2000 ]; then
+            echo "No safe paid budget remains for this 1000-state stage."
+            exit 1
+          fi
+          echo "S1000_REMAINING_REQ=$REM_REQ" >> "$GITHUB_ENV"
+          echo "S1000_REMAINING_TOK=$REM_TOK" >> "$GITHUB_ENV"
+          echo "1000-state lifetime cap remaining: $REM_REQ requests and $REM_TOK input tokens."
+
       - name: Refuse duplicate 1000-state spend
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,8 +202,8 @@ jobs:
             --decision-every=8 \
             --sample=1000 \
             --min-cache-hits=240 \
-            --max-requests=760 \
-            --max-input-tokens=1520000 \
+            --max-requests="$S1000_REMAINING_REQ" \
+            --max-input-tokens="$S1000_REMAINING_TOK" \
             --reserve-input-tokens=2000 \
             --max-usd=0.065 \
             --usd-per-mtok=0.042 \
