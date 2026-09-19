@@ -63,6 +63,7 @@
     "research:check-safe-jev": "bun run research/check-safe-jev.ts",
     "research:check-spend-budget": "bun run research/check-spend-budget.ts",
     "research:check-paid-workflows": "bun run research/check-paid-workflows.ts",
-    "research:check-live-spend-safety": "bun run research/check-live-spend-safety.ts"
+    "research:check-live-spend-safety": "bun run research/check-live-spend-safety.ts",
+    "research:check-jev-staged-plan": "bun run research/check-jev-staged-plan.ts"
   }
 }
