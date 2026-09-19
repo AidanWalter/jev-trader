@@ -4,6 +4,7 @@ import { CachedEvaluator, JsonlSignalCache } from "./cache";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
+import { jevSampleId, nestedJevSample } from "./jev-sampling";
 import type { InputProfile } from "./profiles";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
 import type { Direction, FeatureState } from "./types";
@@ -91,47 +92,8 @@ if (!eligibleRows.length) {
   throw new Error("no train states match the optional paid reference cache");
 }
 
-function sampleRank(row: Row) {
-  const text = row.state.symbol + ":" + row.state.ts;
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
+const sample = nestedJevSample(eligibleRows, sampleCount, 4);
 
-function stratifiedSample(input: Row[], n: number) {
-  if (input.length <= n) return [...input].sort((a, b) => sampleRank(a) - sampleRank(b));
-  const bySymbol = new Map<string, Row[]>();
-  for (const row of input) {
-    const xs = bySymbol.get(row.state.symbol) ?? [];
-    xs.push(row);
-    bySymbol.set(row.state.symbol, xs);
-  }
-  const symbols = [...bySymbol.keys()].sort();
-  for (const symbol of symbols) {
-    bySymbol.get(symbol)!.sort((a, b) => sampleRank(a) - sampleRank(b));
-  }
-
-  const picked: Row[] = [];
-  let rank = 0;
-  while (picked.length < n) {
-    let added = false;
-    for (const symbol of symbols) {
-      const row = bySymbol.get(symbol)![rank];
-      if (row && picked.length < n) {
-        picked.push(row);
-        added = true;
-      }
-    }
-    if (!added) break;
-    rank++;
-  }
-  return picked;
-}
-
-const sample = stratifiedSample(eligibleRows, sampleCount);
 const raw = createReplayEvaluator("jev-direction", profile);
 const ledger = new SpendBudgetLedger({
   maxRequests,
@@ -241,6 +203,12 @@ const result = {
   decisionEveryBars,
   trainOnly: true,
   sampleCount,
+  sampleStateIds: sample.map(jevSampleId),
+  sampling: {
+    method: "nested-symbol-time-quartile-v1",
+    timeBuckets: 4,
+    eligibleStates: eligibleRows.length,
+  },
   sealedTestBars: split.test.length,
   budget: ledger.snapshot(),
   reference: referenceRaw ? {
