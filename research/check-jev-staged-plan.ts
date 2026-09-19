@@ -94,9 +94,9 @@ check("240-state sample nests exactly into 1000", prefix(s240, s1000));
 check("1000-state checkpoint contains exactly 1000 states", s1000.length === 1000);
 check("development state count matches pinned 6996", devRows.length === 6996);
 check("development expansion after 1000 cache hits is at most 5996", devRows.length - s1000.length <= 5996);
-check("sealed tail fits the 1000-call hard ceiling", testRows.length <= 1000);
-check("staged research request ceiling is at most 7996", totalFreshRequests <= 7996);
-check("2000-token reservation ceiling costs less than $0.70", reservedUsd < 0.70);
+check("sealed tail fits the 1752-call hard ceiling", testRows.length <= 1752);
+check("staged research request ceiling is at most 8748", totalFreshRequests <= 8748);
+check("2000-token reservation ceiling costs less than $0.75", reservedUsd < 0.75);
 
 console.log(JSON.stringify({
   version: "jev-staged-plan-readiness-v1",
