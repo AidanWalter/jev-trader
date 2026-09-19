@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       confirm_spend:
-        description: I approve at most 240 fresh requests under a hard $0.025 ledger cap
+        description: I approve at most 228 fresh requests under a hard $0.020 ledger cap
         required: true
         type: boolean
         default: false
@@ -71,9 +71,9 @@ jobs:
 
       - name: Print zero-call expanded sample budget
         run: |
-          echo "Hard limits: 240 fresh requests, 500000 input tokens, $0.025."
+          echo "Hard limits: 228 fresh requests, 456000 input tokens, $0.020."
           echo "The first 12 deterministic sample states are already cached from the verified canary."
-          echo "At the 2000-token reservation, the full 240-request worst-case reservation is 480000 tokens = $0.02016 at $0.042/MTok."
+          echo "The remaining 228 fresh requests reserve at most 456000 tokens = $0.019152 at $0.042/MTok."
 
       - name: Refuse duplicate paid sample
         env:
@@ -97,10 +97,11 @@ jobs:
             --profile=lean \
             --decision-every=8 \
             --sample=240 \
-            --max-requests=240 \
-            --max-input-tokens=500000 \
+            --min-cache-hits=12 \
+            --max-requests=228 \
+            --max-input-tokens=456000 \
             --reserve-input-tokens=2000 \
-            --max-usd=0.025 \
+            --max-usd=0.020 \
             --usd-per-mtok=0.042 \
             --concurrency=1 \
             --cache=data/sample/jev-direction-cache.jsonl \
