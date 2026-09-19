@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
-import { buildPortfolioFeatureStates } from "./portfolio-features";
+import { portfolioStateIds, stateSetDigest } from "./state-set";
 import type { InputProfile } from "./profiles";
 import { chronologicalRanges } from "./splits";
 import { fingerprintUniverse, alignUniverse, loadUniverse } from "./universe";
@@ -42,31 +42,9 @@ const cfg = {
   directionThresholdBpsFloor,
   directionThresholdFixedCostBps,
 };
-const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
-
-function stateIds(range: { start: number; end: number }) {
-  const ids: string[] = [];
-  const first = Math.max(cfg.minHistoryBars, range.start);
-  for (let i = first; i + horizonBars < range.end; i += decisionEveryBars) {
-    const states = buildPortfolioFeatureStates(series, i, cfg);
-    for (const asset of assets) {
-      const state = states.get(asset.spec.symbol);
-      if (!state) continue;
-      ids.push(state.symbol + ":" + state.ts);
-    }
-  }
-  return ids;
-}
-
-function sha256Lines(lines: string[]) {
-  const h = new Bun.CryptoHasher("sha256");
-  for (const line of lines) h.update(line + "\n");
-  return h.digest("hex");
-}
-
-const trainIds = stateIds(ranges.train);
-const validationIds = stateIds(ranges.validation);
-const testIds = stateIds(ranges.test);
+const trainIds = portfolioStateIds(assets, ranges.train, cfg, decisionEveryBars);
+const validationIds = portfolioStateIds(assets, ranges.validation, cfg, decisionEveryBars);
+const testIds = portfolioStateIds(assets, ranges.test, cfg, decisionEveryBars);
 const developmentIds = [...trainIds, ...validationIds];
 
 const record = {
@@ -93,10 +71,10 @@ const record = {
     spreadBps,
   },
   splitStateSets: {
-    train: { count: trainIds.length, sha256: sha256Lines(trainIds) },
-    validation: { count: validationIds.length, sha256: sha256Lines(validationIds) },
-    development: { count: developmentIds.length, sha256: sha256Lines(developmentIds) },
-    sealed: { count: testIds.length, sha256: sha256Lines(testIds) },
+    train: stateSetDigest(trainIds),
+    validation: stateSetDigest(validationIds),
+    development: stateSetDigest(developmentIds),
+    sealed: stateSetDigest(testIds),
   },
   boundaries: {
     trainStartTs: bars[ranges.train.start]?.ts ?? null,
