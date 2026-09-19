@@ -18,7 +18,7 @@ on:
         description: TypeSafe input-token increase caused by the development run
         required: true
       confirm_spend:
-        description: I approve this one-time sealed test under a hard $0.09 ledger cap
+        description: I approve this one-time sealed test under a hard $0.15 ledger cap
         required: true
         type: boolean
         default: false
@@ -113,8 +113,8 @@ jobs:
             --cache=data/sealed/jev-direction-cache.jsonl | tee data/sealed/preflight.txt
           MISSING="$(sed -n 's/^new Jev calls required //p' data/sealed/preflight.txt | tail -1)"
           test -n "$MISSING"
-          if [ "$MISSING" -gt 1000 ]; then
-            echo "Sealed test needs $MISSING fresh calls, above the 1000-call hard ceiling."
+          if [ "$MISSING" -gt 1752 ]; then
+            echo "Sealed test needs $MISSING fresh calls, above the 1752-call hard ceiling."
             exit 1
           fi
           echo "Preflight accepted $MISSING missing sealed states. No Jev call has been made."
@@ -140,11 +140,11 @@ jobs:
             --manifest=data/sealed/universe/universe.json \
             --cache=data/sealed/jev-direction-cache.jsonl \
             --concurrency=1 \
-            --max-new-evals=1000 \
-            --max-paid-requests=1000 \
-            --max-input-tokens=2000000 \
+            --max-new-evals=1752 \
+            --max-paid-requests=1752 \
+            --max-input-tokens=3504000 \
             --reserve-tokens-per-request=2000 \
-            --max-usd=0.09 \
+            --max-usd=0.15 \
             --usd-per-mtok=0.042 \
             --out=data/sealed/result.json | tee data/sealed/output.txt
 
