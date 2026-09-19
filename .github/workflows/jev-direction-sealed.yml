@@ -38,7 +38,7 @@ jobs:
       - name: Download exact qualified development artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-development-${{ inputs.development_run_id }}
+          pattern: jev-direction-development-sample-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -52,11 +52,13 @@ jobs:
           SELECTION="$(find prior -name selection.json -print -quit)"
           PILOT="$(find prior -name pilot.json -print -quit)"
           CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          AUDIT="$(find prior -name validation-audit.json -print -quit)"
           MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
           test -n "$FREEZE"
           test -n "$SELECTION"
           test -n "$PILOT"
           test -n "$CACHE"
+          test -n "$AUDIT"
           test -n "$MANIFEST"
           jq -e '
             .qualification.passed == true and
@@ -64,6 +66,7 @@ jobs:
             .chosen.profile == "lean" and
             .chosen.horizonBars == 8
           ' "$SELECTION" >/dev/null
+          jq -e '.passed == true and .positiveSegments == .segmentCount' "$AUDIT" >/dev/null
           jq -e '
             .modelName == "jev-direction" and
             .profiles == ["lean"] and
@@ -75,6 +78,7 @@ jobs:
           cp -R "$(dirname "$MANIFEST")" data/sealed/universe
           cp "$FREEZE" data/sealed/freeze.json
           cp "$SELECTION" data/sealed/selection.json
+          cp "$AUDIT" data/sealed/validation-audit.json
           cp "$PILOT" data/sealed/pilot.json
           cp "$CACHE" data/sealed/jev-direction-cache.jsonl
 
@@ -91,6 +95,17 @@ jobs:
             exit 1
           fi
           echo "Preflight accepted $MISSING missing sealed states. No Jev call has been made."
+
+      - name: Refuse duplicate sealed spend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="jev-direction-sealed-development-${{ inputs.development_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate sealed spend"
+            exit 1
+          fi
 
       - name: Run one-time frozen sealed test
         env:
@@ -111,15 +126,24 @@ jobs:
             --out=data/sealed/result.json | tee data/sealed/output.txt
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
-          name: jev-direction-sealed-${{ github.run_id }}
+          name: jev-direction-sealed-development-${{ inputs.development_run_id }}
           path: |
             data/sealed/freeze.json
             data/sealed/selection.json
+            data/sealed/validation-audit.json
             data/sealed/pilot.json
             data/sealed/jev-direction-cache.jsonl
             data/sealed/preflight.txt
             data/sealed/output.txt
             data/sealed/result.json
           retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-sealed-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
+
