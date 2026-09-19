@@ -1,0 +1,62 @@
+name: jev-zero-call-readiness
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/jev-zero-call-readiness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download exact frozen market artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: market
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - name: Download already-paid full-Jev reference cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Run zero-call staged readiness rehearsal
+        run: |
+          set -euo pipefail
+          MANIFEST="$(find market -path '*/universe/universe.json' -print -quit)"
+          CACHE="$(find reference -type f -name '*cache*.jsonl' -print -quit)"
+          test -n "$MANIFEST"
+          test -n "$CACHE"
+          bun run research/check-jev-staged-plan.ts "$MANIFEST" \
+            --reference-cache="$CACHE" \
+            --horizon=8 \
+            --decision-every=8 \
+            --reserve-tokens=2000 \
+            --usd-per-mtok=0.042 | tee readiness.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-zero-call-readiness-${{ github.run_id }}
+          path: readiness.txt
+          retention-days: 30
