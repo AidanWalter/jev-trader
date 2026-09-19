@@ -62,6 +62,7 @@ jobs:
             .sampleCount == 240 and
             .budget.requestsStarted <= 240 and
             .budget.estimatedUsd <= 0.025 and
+            .metrics.avgInputTokens <= 1600 and
             .metrics.brier < 0.6666667 and
             .metrics.nonFlatCount >= 40 and
             (
