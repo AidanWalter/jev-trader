@@ -58,6 +58,8 @@ const exactRequirements: Record<string, string[]> = {
     "dashboard_verified",
     "dashboard_request_delta",
     "dashboard_input_token_delta",
+    ".metrics.brier < 0.80",
+    ".metrics.nonFlatCount >= 8",
     "Refuse duplicate paid sample",
     "if: success()",
     "if: failure()",
@@ -77,6 +79,9 @@ const exactRequirements: Record<string, string[]> = {
     "dashboard_verified",
     "dashboard_request_delta",
     "dashboard_input_token_delta",
+    ".metrics.brier < 0.6666667",
+    ".positiveTimeQuartiles >= 3",
+    ".positiveSymbols >= 2",
     "Refuse duplicate paid development expansion",
     "Independent four-segment validation audit",
     "if: success()",
@@ -98,6 +103,18 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
 };
+
+const stagedResearchCaps = {
+  "jev-direction-canary.yml": { requests: 12, usd: 0.0015 },
+  "jev-direction-sample-48.yml": { requests: 36, usd: 0.004 },
+  "jev-direction-sample.yml": { requests: 192, usd: 0.017 },
+  "jev-direction-development.yml": { requests: 6756, usd: 0.57 },
+  "jev-direction-sealed.yml": { requests: 1000, usd: 0.09 },
+};
+const totalStagedRequests = Object.values(stagedResearchCaps)
+  .reduce((sum, x) => sum + x.requests, 0);
+const totalStagedUsd = Object.values(stagedResearchCaps)
+  .reduce((sum, x) => sum + x.usd, 0);
 
 let failures = 0;
 const fail = (msg: string) => {
@@ -134,6 +151,17 @@ for (const name of readdirSync(dir).filter((x) => x.endsWith(".yml") || x.endsWi
   } else {
     ok(name + " remains hard-disabled");
   }
+}
+
+if (totalStagedRequests !== 7996) {
+  fail("staged paid research request ceiling changed from 7,996: " + totalStagedRequests);
+} else {
+  ok("entire staged paid research chain is capped at 7,996 fresh requests");
+}
+if (totalStagedUsd > 0.70) {
+  fail("staged paid research dollar ceiling exceeds $0.70: $" + totalStagedUsd.toFixed(6));
+} else {
+  ok("entire staged paid research chain is capped at $" + totalStagedUsd.toFixed(4));
 }
 
 process.exit(failures ? 1 : 0);
