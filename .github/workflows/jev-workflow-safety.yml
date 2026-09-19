@@ -34,30 +34,35 @@ jobs:
           }
           exact = {
               "jev-direction-canary.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=12", "--max-requests=12", "--max-input-tokens=30000",
                   "--reserve-input-tokens=2000", "--max-usd=0.0015", "--concurrency=1",
                   "jev-credit-reference-v1", "run-id: 35420536540", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample-48.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=48", "--min-cache-hits=12", "--max-requests=36",
                   "--max-input-tokens=80000", "--reserve-input-tokens=2000",
                   "--max-usd=0.004", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=240", "--min-cache-hits=48", "--max-requests=192",
                   "--max-input-tokens=384000", "--reserve-input-tokens=2000",
                   "--max-usd=0.017", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample-1000.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=1000", "--min-cache-hits=240", "--max-requests=760",
                   "--max-input-tokens=1520000", "--reserve-input-tokens=2000",
                   "--max-usd=0.065", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-development.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "--model=jev-direction", "--horizons=8", "--profiles=lean",
                   "--decision-every=8", "--direction-only=true",
                   "MAX_REQ=5996", "MAX_TOK=11992000",
@@ -68,6 +73,7 @@ jobs:
                   "resume_dashboard_request_delta", "resume_dashboard_input_token_delta",
               ],
               "jev-direction-sealed.yml": [
+                  "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
                   "MAX_REQ=1752", "MAX_TOK=3504000",
                   "SEALED_REMAINING_REQ", "SEALED_REMAINING_TOK",
                   "--reserve-tokens-per-request=2000",
