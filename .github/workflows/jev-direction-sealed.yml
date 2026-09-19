@@ -11,6 +11,12 @@ on:
         required: true
         type: boolean
         default: false
+      dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the development run
+        required: true
+      dashboard_input_token_delta:
+        description: TypeSafe input-token increase caused by the development run
+        required: true
       confirm_spend:
         description: I approve this one-time sealed test under a hard $0.09 ledger cap
         required: true
@@ -72,8 +78,25 @@ jobs:
             .profiles == ["lean"] and
             .horizons == [8] and
             .decisionEveryBars == 8 and
-            .spend.estimatedUsd <= 0.60
+            .spend.estimatedUsd <= 0.57
           ' "$PILOT" >/dev/null
+          OBS_REQ="${{ inputs.dashboard_request_delta }}"
+          OBS_TOK="${{ inputs.dashboard_input_token_delta }}"
+          [[ "$OBS_REQ" =~ ^[0-9]+$ ]]
+          [[ "$OBS_TOK" =~ ^[0-9]+$ ]]
+          EXP_REQ="$(jq -r '.spend.requestsStarted' "$PILOT")"
+          EXP_TOK="$(jq -r '.spend.inputTokens' "$PILOT")"
+          if [ "$OBS_REQ" -ne "$EXP_REQ" ]; then
+            echo "TypeSafe request delta $OBS_REQ does not equal development artifact request count $EXP_REQ"
+            exit 1
+          fi
+          LOW=$((EXP_TOK * 95 / 100))
+          HIGH=$((EXP_TOK * 105 / 100 + 100))
+          if [ "$OBS_TOK" -lt "$LOW" ] || [ "$OBS_TOK" -gt "$HIGH" ]; then
+            echo "TypeSafe input-token delta $OBS_TOK does not reconcile with development artifact $EXP_TOK (allowed $LOW..$HIGH)"
+            exit 1
+          fi
+          echo "Provider billing reconciled: $OBS_REQ requests and $OBS_TOK input tokens."
           mkdir -p data/sealed
           cp -R "$(dirname "$MANIFEST")" data/sealed/universe
           cp "$FREEZE" data/sealed/freeze.json
