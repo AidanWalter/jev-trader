@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
-import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetExceededError, SpendBudgetLedger } from "./budget";
+import { BudgetedEvaluator, defaultSpendBudget, remainingSpendBudget, SpendBudgetExceededError, SpendBudgetLedger } from "./budget";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
@@ -136,35 +136,37 @@ if (paidModel && existsSync(statePath)) {
   }
 }
 
-const priorPaidUsd = priorPaidInputTokens / 1_000_000 * usdPerMTok;
-const remainingPaidRequests = Math.max(0, lifetimeMaxPaidRequests - priorPaidRequests);
-const remainingInputTokens = Math.max(0, lifetimeMaxInputTokens - priorPaidInputTokens);
-const remainingUsd = Math.max(0, lifetimeMaxUsd - priorPaidUsd);
+const lifetimeBudget = defaultSpendBudget({
+  maxRequests: lifetimeMaxPaidRequests,
+  maxInputTokens: lifetimeMaxInputTokens,
+  maxUsd: lifetimeMaxUsd,
+  usdPerMTok,
+  reserveTokensPerRequest,
+});
+const remainingBudget = paidModel
+  ? remainingSpendBudget(lifetimeBudget, {
+      requests: priorPaidRequests,
+      inputTokens: priorPaidInputTokens,
+    })
+  : null;
 const remainingNewEvaluations = paidModel
-  ? Math.max(0, Math.min(lifetimeMaxNewEvaluations - priorPaidRequests, remainingPaidRequests))
+  ? Math.max(
+      0,
+      Math.min(
+        lifetimeMaxNewEvaluations - priorPaidRequests,
+        remainingBudget?.maxRequests ?? 0,
+      ),
+    )
   : lifetimeMaxNewEvaluations;
 
-if (
-  paidModel &&
-  (
-    remainingNewEvaluations <= 0 ||
-    remainingInputTokens < reserveTokensPerRequest ||
-    remainingUsd * 1_000_000 / usdPerMTok < reserveTokensPerRequest
-  )
-) {
+if (paidModel && (!remainingBudget || remainingNewEvaluations <= 0)) {
   throw new SpendBudgetExceededError(
     "paid Jev live-paper lifetime budget is exhausted for this persisted state"
   );
 }
 
-const spendLedger = paidModel
-  ? new SpendBudgetLedger(defaultSpendBudget({
-      maxRequests: remainingPaidRequests,
-      maxInputTokens: remainingInputTokens,
-      maxUsd: remainingUsd,
-      usdPerMTok,
-      reserveTokensPerRequest,
-    }))
+const spendLedger = paidModel && remainingBudget
+  ? new SpendBudgetLedger(remainingBudget)
   : null;
 
 const raw = createReplayEvaluator(freeze.evaluator.kind, freeze.evaluator.profile);
