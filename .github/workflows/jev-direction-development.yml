@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       confirm_spend:
-        description: I approve one fixed direction-only development pass under a hard $0.60 ledger cap
+        description: I approve one fixed direction-only development pass under a hard $0.57 ledger cap
         required: true
         type: boolean
         default: false
@@ -81,7 +81,8 @@ jobs:
             --horizon=8 \
             --decision-every=8 \
             --tokens-per-request=2000 | tee data/dev/spend-plan.txt
-          echo "Hard paid limits for the next step: 7000 fresh requests, 14,000,000 input tokens, $0.60."
+          echo "Hard paid limits: 6756 fresh requests, 13,512,000 input tokens, $0.57."
+          echo "The 240 nested sample states must already be cache hits; otherwise the pilot refuses to start."
 
       - name: Refuse duplicate paid development expansion
         env:
@@ -111,11 +112,11 @@ jobs:
             --allow-short=false \
             --require-complete-grid=true \
             --concurrency=1 \
-            --max-new-evals=7000 \
-            --max-paid-requests=7000 \
-            --max-input-tokens=14000000 \
+            --max-new-evals=6756 \
+            --max-paid-requests=6756 \
+            --max-input-tokens=13512000 \
             --reserve-tokens-per-request=2000 \
-            --max-usd=0.60 \
+            --max-usd=0.57 \
             --usd-per-mtok=0.042 \
             --cache=data/dev/jev-direction-cache.jsonl \
             --out=data/dev/pilot.json | tee data/dev/pilot-output.txt
