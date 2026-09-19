@@ -56,7 +56,7 @@ jobs:
       - name: Direction-only cache-only cadence scan
         run: |
           set -o pipefail
-          bun run research/tune-portfolio-apparatus.ts data/audit/universe/universe.json             --pilot=data/audit/pilot.json             --cache=data/audit/cache.jsonl             --grid=full             --direction-only=true             --cadences=8,16,24,32             --out=data/audit/direction-only-cadence-selection.json | tee data/audit/output.txt
+          bun run research/tune-portfolio-apparatus.ts data/audit/universe/universe.json             --pilot=data/audit/pilot.json             --cache=data/audit/cache.jsonl             --grid=fast             --direction-only=true             --cadences=8,16,24,32             --out=data/audit/direction-only-cadence-selection.json | tee data/audit/output.txt
 
       - name: Print cadence result
         if: always()
