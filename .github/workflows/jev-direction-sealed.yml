@@ -22,6 +22,23 @@ on:
         required: true
         type: boolean
         default: false
+      resume_run_id:
+        description: Optional failed jev-direction-sealed run ID to resume from its partial cache
+        required: false
+        default: ""
+      resume_dashboard_verified:
+        description: I checked TypeSafe billing for the failed sealed attempt before resuming
+        required: false
+        type: boolean
+        default: false
+      resume_dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the failed sealed attempt
+        required: false
+        default: "0"
+      resume_dashboard_input_token_delta:
+        description: Exact TypeSafe input-token increase caused by the failed sealed attempt
+        required: false
+        default: "0"
 
 permissions:
   contents: read
@@ -105,6 +122,51 @@ jobs:
           cp "$PILOT" data/sealed/pilot.json
           cp "$CACHE" data/sealed/jev-direction-cache.jsonl
 
+      - name: Download optional failed sealed cache
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-sealed-failed-${{ inputs.resume_run_id }}
+          path: resume
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Restore partial sealed cache and compute remaining lifetime stage budget
+        run: |
+          set -euo pipefail
+          MAX_REQ=1752
+          MAX_TOK=3504000
+          USED_REQ=0
+          USED_TOK=0
+          if [ -n "${{ inputs.resume_run_id }}" ]; then
+            if [ "${{ inputs.resume_dashboard_verified }}" != "true" ]; then
+              echo "Resume requires explicit provider-dashboard verification."
+              exit 1
+            fi
+            USED_REQ="${{ inputs.resume_dashboard_request_delta }}"
+            USED_TOK="${{ inputs.resume_dashboard_input_token_delta }}"
+            [[ "$USED_REQ" =~ ^[0-9]+$ ]]
+            [[ "$USED_TOK" =~ ^[0-9]+$ ]]
+            if [ "$USED_REQ" -gt "$MAX_REQ" ] || [ "$USED_TOK" -gt "$MAX_TOK" ]; then
+              echo "Failed attempt already exceeded the lifetime sealed-stage cap."
+              exit 1
+            fi
+            PARTIAL="$(find resume -type f -name 'jev-direction-cache.jsonl' -print -quit)"
+            test -n "$PARTIAL"
+            cp "$PARTIAL" data/sealed/jev-direction-cache.jsonl
+          fi
+          REM_REQ=$((MAX_REQ - USED_REQ))
+          REM_TOK=$((MAX_TOK - USED_TOK))
+          if [ "$REM_REQ" -le 0 ] || [ "$REM_TOK" -lt 2000 ]; then
+            echo "No safe paid budget remains for this sealed stage."
+            exit 1
+          fi
+          echo "SEALED_REMAINING_REQ=$REM_REQ" >> "$GITHUB_ENV"
+          echo "SEALED_REMAINING_TOK=$REM_TOK" >> "$GITHUB_ENV"
+          echo "Sealed lifetime cap remaining: $REM_REQ requests and $REM_TOK input tokens."
+
       - name: Zero-spend sealed preflight
         run: |
           set -euo pipefail
@@ -140,9 +202,9 @@ jobs:
             --manifest=data/sealed/universe/universe.json \
             --cache=data/sealed/jev-direction-cache.jsonl \
             --concurrency=1 \
-            --max-new-evals=1752 \
-            --max-paid-requests=1752 \
-            --max-input-tokens=3504000 \
+            --max-new-evals="$SEALED_REMAINING_REQ" \
+            --max-paid-requests="$SEALED_REMAINING_REQ" \
+            --max-input-tokens="$SEALED_REMAINING_TOK" \
             --reserve-tokens-per-request=2000 \
             --max-usd=0.15 \
             --usd-per-mtok=0.042 \
