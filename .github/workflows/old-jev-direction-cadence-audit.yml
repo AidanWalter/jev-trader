@@ -1,0 +1,97 @@
+name: old-jev-direction-cadence-audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/old-jev-direction-cadence-audit.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download already-paid long-window Jev cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: prior
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Locate exact paid inputs
+        run: |
+          set -euo pipefail
+          MANIFEST="$(find prior -type f -name universe.json -print -quit)"
+          PILOT="$(find prior -type f -name portfolio-pilot-summary.json -print -quit)"
+          CACHE="$(find prior -type f -name '*cache*.jsonl' -print -quit)"
+          test -n "$MANIFEST"
+          test -n "$PILOT"
+          test -n "$CACHE"
+          mkdir -p data/audit
+          cp "$MANIFEST" data/audit/universe.json
+          cp "$PILOT" data/audit/pilot.json
+          cp "$CACHE" data/audit/cache.jsonl
+          jq -e '
+            .version == "portfolio-pilot-v1" and
+            .modelName == "jev" and
+            .decisionEveryBars == 8 and
+            (.cells | map(select(.status == "complete")) | length) >= 4
+          ' data/audit/pilot.json >/dev/null
+
+      - name: Direction-only cache-only cadence scan
+        run: |
+          set -o pipefail
+          bun run research/tune-portfolio-apparatus.ts data/audit/universe.json             --pilot=data/audit/pilot.json             --cache=data/audit/cache.jsonl             --grid=full             --direction-only=true             --cadences=8,16,24,32             --out=data/audit/direction-only-cadence-selection.json | tee data/audit/output.txt
+
+      - name: Print cadence result
+        if: always()
+        run: |
+          if [ -s data/audit/direction-only-cadence-selection.json ]; then
+            jq '{
+              qualification,
+              chosen: {
+                profile: .chosen.profile,
+                horizonBars: .chosen.horizonBars,
+                decisionEveryBars: .chosen.decisionEveryBars,
+                policy: .chosen.policy,
+                portfolio: .chosen.portfolio,
+                validationMetrics: .chosen.validationMetrics,
+                validationStress: .chosen.validationStress,
+                validationSegments: .chosen.validationSegments,
+                robustValidationObjective: .chosen.robustValidationObjective
+              },
+              candidates: [.candidates[] | {
+                profile,
+                horizonBars,
+                decisionEveryBars,
+                validationReturnPct: .validationMetrics.returnPct,
+                maxDrawdownPct: .validationMetrics.maxDrawdownPct,
+                fills: .validationMetrics.fills,
+                robustValidationObjective
+              }]
+            }' data/audit/direction-only-cadence-selection.json
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: old-jev-direction-cadence-audit-${{ github.run_id }}
+          path: |
+            data/audit/direction-only-cadence-selection.json
+            data/audit/output.txt
+          retention-days: 30
