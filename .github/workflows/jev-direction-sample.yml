@@ -61,7 +61,8 @@ jobs:
             .decisionEveryBars == 8 and
             .sampleCount == 12 and
             .budget.requestsStarted <= 12 and
-            .budget.estimatedUsd <= 0.0015
+            .budget.estimatedUsd <= 0.0015 and
+            .metrics.avgInputTokens <= 1600
           ' "$RESULT" >/dev/null
           mkdir -p data/sample
           cp -R "$(dirname "$MANIFEST")" data/sample/universe
