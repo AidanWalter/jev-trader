@@ -22,6 +22,23 @@ on:
         required: true
         type: boolean
         default: false
+      resume_run_id:
+        description: Optional failed jev-direction-development run ID to resume from its partial cache
+        required: false
+        default: ""
+      resume_dashboard_verified:
+        description: I checked TypeSafe billing for the failed development attempt before resuming
+        required: false
+        type: boolean
+        default: false
+      resume_dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the failed development attempt
+        required: false
+        default: "0"
+      resume_dashboard_input_token_delta:
+        description: Exact TypeSafe input-token increase caused by the failed development attempt
+        required: false
+        default: "0"
 
 permissions:
   contents: read
@@ -112,6 +129,51 @@ jobs:
           cp "$CACHE" data/dev/jev-direction-cache.jsonl
           cp "$RESULT" data/dev/sample.json
 
+      - name: Download optional failed development cache
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-development-failed-${{ inputs.resume_run_id }}
+          path: resume
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Restore partial cache and compute remaining lifetime stage budget
+        run: |
+          set -euo pipefail
+          MAX_REQ=5996
+          MAX_TOK=11992000
+          USED_REQ=0
+          USED_TOK=0
+          if [ -n "${{ inputs.resume_run_id }}" ]; then
+            if [ "${{ inputs.resume_dashboard_verified }}" != "true" ]; then
+              echo "Resume requires explicit provider-dashboard verification."
+              exit 1
+            fi
+            USED_REQ="${{ inputs.resume_dashboard_request_delta }}"
+            USED_TOK="${{ inputs.resume_dashboard_input_token_delta }}"
+            [[ "$USED_REQ" =~ ^[0-9]+$ ]]
+            [[ "$USED_TOK" =~ ^[0-9]+$ ]]
+            if [ "$USED_REQ" -gt "$MAX_REQ" ] || [ "$USED_TOK" -gt "$MAX_TOK" ]; then
+              echo "Failed attempt already exceeded the lifetime development-stage cap."
+              exit 1
+            fi
+            PARTIAL="$(find resume -type f -name 'jev-direction-cache.jsonl' -print -quit)"
+            test -n "$PARTIAL"
+            cp "$PARTIAL" data/dev/jev-direction-cache.jsonl
+          fi
+          REM_REQ=$((MAX_REQ - USED_REQ))
+          REM_TOK=$((MAX_TOK - USED_TOK))
+          if [ "$REM_REQ" -le 0 ] || [ "$REM_TOK" -lt 2000 ]; then
+            echo "No safe paid budget remains for this development stage."
+            exit 1
+          fi
+          echo "DEV_REMAINING_REQ=$REM_REQ" >> "$GITHUB_ENV"
+          echo "DEV_REMAINING_TOK=$REM_TOK" >> "$GITHUB_ENV"
+          echo "Development lifetime cap remaining: $REM_REQ requests and $REM_TOK input tokens."
+
       - name: Zero-call full development spend plan
         run: |
           bun run research/jev-spend-plan.ts data/dev/universe/universe.json \
@@ -166,9 +228,9 @@ jobs:
             --allow-short=false \
             --require-complete-grid=true \
             --concurrency=1 \
-            --max-new-evals=5996 \
-            --max-paid-requests=5996 \
-            --max-input-tokens=11992000 \
+            --max-new-evals="$DEV_REMAINING_REQ" \
+            --max-paid-requests="$DEV_REMAINING_REQ" \
+            --max-input-tokens="$DEV_REMAINING_TOK" \
             --reserve-tokens-per-request=2000 \
             --max-usd=0.505 \
             --usd-per-mtok=0.042 \
