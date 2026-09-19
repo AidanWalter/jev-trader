@@ -96,6 +96,11 @@ jobs:
                   "--max-usd=0.15", "--concurrency=1",
                   "resume_run_id", "resume_dashboard_verified",
                   "resume_dashboard_request_delta", "resume_dashboard_input_token_delta",
+                  ".result.returnPct > 0",
+                  ".result.maxDrawdownPct >= -10",
+                  "(.result.fills | length) >= 20",
+                  ".diagnostics.turnoverPerDay <= 1.5",
+                  ".diagnostics.signal.overall.meanCalledSideReturnBps > 0",
               ],
           }
           failures = []
