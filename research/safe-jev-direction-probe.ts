@@ -320,8 +320,6 @@ for (const gate of confidenceGates) {
     " · net " + gate.netCalledBpsPerState!.toFixed(2) + " bps/state" +
     " · acc " + gate.accuracyPct!.toFixed(1) + "%" +
     " · positive quartiles " + gate.positiveTimeQuartiles + "/4" +
-    " · positive symbols " + gate.positiveSymbols + "/" + assets.length +
-    " · positive quartiles " + gate.positiveTimeQuartiles + "/4" +
     " · positive symbols " + gate.positiveSymbols + "/" + assets.length
   );
 }
