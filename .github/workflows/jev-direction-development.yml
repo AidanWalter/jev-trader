@@ -121,6 +121,23 @@ jobs:
           echo "Hard paid limits: 5996 fresh requests, 11,992,000 input tokens, $0.505."
           echo "The 1000 nested sample states must already be cache hits; otherwise the pilot refuses to start."
 
+      - name: Zero-call development cache preflight
+        run: |
+          bun run research/jev-development-preflight.ts data/dev/universe/universe.json \
+            --cache=data/dev/jev-direction-cache.jsonl \
+            --model=jev-direction \
+            --profile=lean \
+            --horizon=8 \
+            --decision-every=8 \
+            --min-cached=1000 \
+            --max-missing=5996 \
+            --out=data/dev/development-preflight.json
+          jq -e '
+            .totalStates == 6996 and
+            .cachedStates >= 1000 and
+            .missingStates <= 5996
+          ' data/dev/development-preflight.json >/dev/null
+
       - name: Refuse duplicate paid development expansion
         env:
           GH_TOKEN: ${{ github.token }}
@@ -197,6 +214,7 @@ jobs:
             data/dev/universe/
             data/dev/sample.json
             data/dev/spend-plan.txt
+            data/dev/development-preflight.json
             data/dev/jev-direction-cache.jsonl
             data/dev/pilot.json
             data/dev/pilot-output.txt
