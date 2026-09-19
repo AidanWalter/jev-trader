@@ -176,7 +176,17 @@ function loadState(): PaperState | null {
     s.symbol !== symbol ||
     s.interval !== interval
   ) throw new Error("paper state does not match the frozen apparatus");
+  s.paidRequests = Math.max(0, Number(s.paidRequests ?? 0));
+  s.paidInputTokens = Math.max(0, Number(s.paidInputTokens ?? 0));
   return s;
+}
+
+function syncPaidSpend(state: PaperState) {
+  if (!spendLedger) return;
+  const snap = spendLedger.snapshot();
+  state.paidRequests = priorPaidRequests + snap.requestsStarted;
+  state.paidInputTokens = priorPaidInputTokens + snap.inputTokens;
+  saveState(state);
 }
 function equity(state: PaperState, price: number) {
   return state.cash + state.quantity * price;
