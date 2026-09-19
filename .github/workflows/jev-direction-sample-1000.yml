@@ -1,0 +1,212 @@
+name: jev-direction-sample-1000
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample240_run_id:
+        description: Successful jev-direction-sample 240-state run ID whose TypeSafe dashboard usage you personally verified
+        required: true
+      dashboard_verified:
+        description: I checked TypeSafe billing for the 240-state stage and it matched the artifact closely
+        required: true
+        type: boolean
+        default: false
+      dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the 240-state stage
+        required: true
+      dashboard_input_token_delta:
+        description: TypeSafe input-token increase caused by the 240-state stage
+        required: true
+      confirm_spend:
+        description: I approve at most 760 fresh Jev requests under a hard $0.065 ledger cap
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sample1000:
+    if: ${{ inputs.dashboard_verified == true && inputs.confirm_spend == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/replay-lab
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Download verified 240-state artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-sample-stage48-*
+          path: prior
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.sample240_run_id }}
+
+      - name: Download already-paid full-Jev reference cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Verify 240-state signal, billing, and restore cache
+        run: |
+          set -euo pipefail
+          RESULT="$(find prior -name jev-direction-sample.json -print -quit)"
+          CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
+          MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
+          REFERENCE_CACHE="$(find reference -type f -name '*cache*.jsonl' -print -quit)"
+          test -n "$RESULT"
+          test -n "$CACHE"
+          test -n "$MANIFEST"
+          test -n "$REFERENCE_CACHE"
+
+          jq -e '
+            .version == "safe-jev-direction-probe-v1" and
+            .horizonBars == 8 and
+            .profile == "lean" and
+            .decisionEveryBars == 8 and
+            .sampleCount == 240 and
+            .preCachedSampleStates >= 48 and
+            .freshStatesRequired <= 192 and
+            .budget.requestsStarted <= 192 and
+            .budget.estimatedUsd <= 0.017 and
+            .metrics.avgInputTokens <= 1600 and
+            .metrics.brier < 0.6666667 and
+            .metrics.nonFlatCount >= 40 and
+            (
+              (.metrics.confidenceGates | any(
+                .threshold >= 0.55 and
+                .n >= 30 and
+                .netCalledBpsPerState > 3 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              )) or
+              (.metrics.edgeGates | any(
+                .threshold >= 0.20 and
+                .n >= 30 and
+                .netCalledBpsPerState > 3 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              ))
+            )
+          ' "$RESULT" >/dev/null
+
+          OBS_REQ="${{ inputs.dashboard_request_delta }}"
+          OBS_TOK="${{ inputs.dashboard_input_token_delta }}"
+          [[ "$OBS_REQ" =~ ^[0-9]+$ ]]
+          [[ "$OBS_TOK" =~ ^[0-9]+$ ]]
+          EXP_REQ="$(jq -r '.budget.requestsStarted' "$RESULT")"
+          EXP_TOK="$(jq -r '.budget.inputTokens' "$RESULT")"
+          if [ "$OBS_REQ" -ne "$EXP_REQ" ]; then
+            echo "TypeSafe request delta $OBS_REQ does not equal artifact request count $EXP_REQ"
+            exit 1
+          fi
+          LOW=$((EXP_TOK * 95 / 100))
+          HIGH=$((EXP_TOK * 105 / 100 + 100))
+          if [ "$OBS_TOK" -lt "$LOW" ] || [ "$OBS_TOK" -gt "$HIGH" ]; then
+            echo "TypeSafe input-token delta $OBS_TOK does not reconcile with artifact $EXP_TOK (allowed $LOW..$HIGH)"
+            exit 1
+          fi
+
+          mkdir -p data/sample1000
+          cp -R "$(dirname "$MANIFEST")" data/sample1000/universe
+          cp "$CACHE" data/sample1000/jev-direction-cache.jsonl
+          cp "$RESULT" data/sample1000/sample240.json
+          cp "$REFERENCE_CACHE" data/sample1000/reference-full-jev-cache.jsonl
+
+      - name: Refuse duplicate 1000-state spend
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="jev-direction-sample1000-stage240-${{ inputs.sample240_run_id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "$NAME already exists; refusing duplicate paid sample"
+            exit 1
+          fi
+
+      - name: Run nested 1000-state Jev direction sample
+        env:
+          TYPESAFE_AI_API_KEY: ${{ secrets.TYPESAFE_AI_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$TYPESAFE_AI_API_KEY"
+          bun run research/safe-jev-direction-probe.ts data/sample1000/universe/universe.json \
+            --horizon=8 \
+            --profile=lean \
+            --decision-every=8 \
+            --sample=1000 \
+            --min-cache-hits=240 \
+            --max-requests=760 \
+            --max-input-tokens=1520000 \
+            --reserve-input-tokens=2000 \
+            --max-usd=0.065 \
+            --usd-per-mtok=0.042 \
+            --concurrency=1 \
+            --reference-cache=data/sample1000/reference-full-jev-cache.jsonl \
+            --reference-profile=path \
+            --reference-model=jev \
+            --cache=data/sample1000/jev-direction-cache.jsonl \
+            --out=data/sample1000/result.json | tee data/sample1000/output.txt
+
+      - name: Verify true nested expansion and robust signal
+        run: |
+          jq -e --slurpfile prior data/sample1000/sample240.json '
+            .sampleCount == 1000 and
+            .preCachedSampleStates >= 240 and
+            .freshStatesRequired <= 760 and
+            .budget.requestsStarted <= 760 and
+            .budget.estimatedUsd <= 0.065 and
+            (.sampleStateIds[0:240] == $prior[0].sampleStateIds) and
+            .metrics.avgInputTokens <= 1600 and
+            .metrics.brier < 0.6666667 and
+            .metrics.nonFlatCount >= 150 and
+            (
+              (.metrics.confidenceGates | any(
+                .threshold >= 0.55 and
+                .n >= 100 and
+                .netCalledBpsPerState > 2 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              )) or
+              (.metrics.edgeGates | any(
+                .threshold >= 0.20 and
+                .n >= 100 and
+                .netCalledBpsPerState > 2 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              ))
+            )
+          ' data/sample1000/result.json >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: jev-direction-sample1000-stage240-${{ inputs.sample240_run_id }}
+          path: |
+            data/sample1000/universe/
+            data/sample1000/sample240.json
+            data/sample1000/jev-direction-cache.jsonl
+            data/sample1000/result.json
+            data/sample1000/output.txt
+          retention-days: 45
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-sample1000-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
