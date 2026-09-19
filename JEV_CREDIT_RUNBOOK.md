@@ -4,6 +4,8 @@ This research path keeps Jev as the sole learned decision source. No distilled m
 
 Paid research uses one fixed apparatus before large-scale evaluation: the `jev-direction` evaluator, the compact `lean` state profile, an 8-bar forecast horizon on hourly BTCUSDT/ETHUSDT/SOLUSDT data, and an 8-bar decision cadence. The paid evaluator asks only the direction question and has retries disabled. Magnitude and adverse-selection questions are not purchased in this staged path.
 
+The 8-hour cadence was rechecked for free on the exact fixed 2024-01-01 through 2026-09-01 universe using development data only. Perfect-foresight diagnostics at 8, 12, 16, and 24-hour decision cadences showed the strongest opportunity and lowest drawdown at 8 hours for the fixed 8-hour forecast target. The sealed tail was not used for this choice. Slower cadences would save requests but discarded too much development-only opportunity, so the paid plan remains fixed at 8 hours rather than tuning cadence with Jev credit.
+
 The paid sequence is deliberately nested. The first stage evaluates 12 states. The next stage expands that exact prefix to 48 states, then 240, then 1,000. Only if the signal gates pass does development fill the remaining fixed train-plus-validation states. Only after deterministic policy tuning, cost stress, qualification, and the independent four-segment validation audit pass may the untouched sealed tail be evaluated.
 
 Every paid stage is `workflow_dispatch` only and requires explicit spend confirmation. Starting with the 48-state stage, the operator must enter the exact request-count and input-token deltas shown by the TypeSafe dashboard for the preceding stage. The workflow refuses to continue unless those provider-side numbers reconcile closely with the saved artifact. This makes the provider dashboard, rather than local telemetry alone, the authority for whether another batch is allowed.
@@ -16,4 +18,6 @@ Forward paper trading is also paid-budgeted. Frozen runners require `--confirm-p
 
 No real exchange order is authorized by this research apparatus. Forward runners remain paper simulations unless a separate, explicit execution authorization and implementation is added later.
 
-When new credit becomes available, the only intended first paid action is `jev-direction-canary`. Nothing else should be run until its 12-call artifact is compared with the TypeSafe dashboard and those numbers agree.
+The staged historical research budget is intentionally separated from the future live-testing reserve. Even if every historical development and sealed state must be purchased, the six staged workflows reserve less than $0.75 in total at the pinned $0.042/MTok rate. A new $5 balance therefore retains more than $4.25 for forward paper operation and later real-time Jev decisions. The historical workflows must not be given a larger cap merely because more credit is available.
+
+When new credit becomes available, the only intended first paid action is `jev-direction-canary`. Nothing else should be run until its 12-call artifact is compared with the TypeSafe dashboard and those numbers agree. If the provider dashboard request count differs from the artifact request count, or its input-token delta differs materially from the artifact token count, stop immediately and do not advance to the 48-state stage.
