@@ -59,6 +59,10 @@ interface PaperState {
   fees: number;
   borrowCost: number;
   fundingNet: number;
+  /** Lifetime paid Jev requests recorded for this frozen paper state. */
+  paidRequests?: number;
+  /** Lifetime provider-reported Jev input tokens for this frozen paper state. */
+  paidInputTokens?: number;
   lastOpenTs: number;
   lastDecisionTs: number | null;
   barsSinceDecision: number;
@@ -105,17 +109,61 @@ const paidModel = freeze.evaluator.kind.startsWith("jev");
 if (paidModel && flag("confirm-paid", "false") !== "true") {
   throw new Error("paid Jev live paper is locked; pass --confirm-paid=true with explicit spend caps");
 }
-const maxNewEvaluations = Math.max(
+const lifetimeMaxNewEvaluations = Math.max(
   0,
   Number(flag("max-new-evals", paidModel ? "12" : "1000000000")),
 );
+const lifetimeMaxPaidRequests = Math.max(0, Number(flag("max-paid-requests", "12")));
+const lifetimeMaxInputTokens = Math.max(0, Number(flag("max-input-tokens", "30000")));
+const lifetimeMaxUsd = Math.max(0, Number(flag("max-usd", "0.002")));
+const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
+const reserveTokensPerRequest = Math.max(1, Number(flag("reserve-tokens-per-request", "2000")));
+
+let priorPaidRequests = 0;
+let priorPaidInputTokens = 0;
+if (paidModel && existsSync(statePath)) {
+  try {
+    const prior = JSON.parse(readFileSync(statePath, "utf8")) as Partial<PaperState>;
+    if (
+      prior.freezeSha256 === freezeSha256 &&
+      prior.evaluatorNamespace === freeze.evaluator.namespace
+    ) {
+      priorPaidRequests = Math.max(0, Number(prior.paidRequests ?? 0));
+      priorPaidInputTokens = Math.max(0, Number(prior.paidInputTokens ?? 0));
+    }
+  } catch {
+    // loadState() below remains authoritative for state-file validation.
+  }
+}
+
+const priorPaidUsd = priorPaidInputTokens / 1_000_000 * usdPerMTok;
+const remainingPaidRequests = Math.max(0, lifetimeMaxPaidRequests - priorPaidRequests);
+const remainingInputTokens = Math.max(0, lifetimeMaxInputTokens - priorPaidInputTokens);
+const remainingUsd = Math.max(0, lifetimeMaxUsd - priorPaidUsd);
+const remainingNewEvaluations = paidModel
+  ? Math.max(0, Math.min(lifetimeMaxNewEvaluations - priorPaidRequests, remainingPaidRequests))
+  : lifetimeMaxNewEvaluations;
+
+if (
+  paidModel &&
+  (
+    remainingNewEvaluations <= 0 ||
+    remainingInputTokens < reserveTokensPerRequest ||
+    remainingUsd * 1_000_000 / usdPerMTok < reserveTokensPerRequest
+  )
+) {
+  throw new SpendBudgetExceededError(
+    "paid Jev live-paper lifetime budget is exhausted for this persisted state"
+  );
+}
+
 const spendLedger = paidModel
   ? new SpendBudgetLedger(defaultSpendBudget({
-      maxRequests: Math.max(1, Number(flag("max-paid-requests", "12"))),
-      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "30000"))),
-      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.002"))),
-      usdPerMTok: Number(flag("usd-per-mtok", "0.042")),
-      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
+      maxRequests: remainingPaidRequests,
+      maxInputTokens: remainingInputTokens,
+      maxUsd: remainingUsd,
+      usdPerMTok,
+      reserveTokensPerRequest,
     }))
   : null;
 
@@ -123,7 +171,7 @@ const raw = createReplayEvaluator(freeze.evaluator.kind, freeze.evaluator.profil
 if (raw.name !== freeze.evaluator.namespace) throw new Error("evaluator namespace differs from frozen portfolio apparatus");
 const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
 const cache = new JsonlSignalCache(cachePath);
-const evaluator = new CachedEvaluator(paidRaw, cache, maxNewEvaluations);
+const evaluator = new CachedEvaluator(paidRaw, cache, remainingNewEvaluations);
 
 const featureConfig = {
   ...defaultFeatureConfig,
@@ -158,7 +206,17 @@ function loadState(): PaperState | null {
     state.interval !== interval ||
     state.symbols.join("|") !== freeze.universe.symbols.join("|")
   ) throw new Error("portfolio paper state does not match the frozen apparatus");
+  state.paidRequests = Math.max(0, Number(state.paidRequests ?? 0));
+  state.paidInputTokens = Math.max(0, Number(state.paidInputTokens ?? 0));
   return state;
+}
+
+function syncPaidSpend(state: PaperState) {
+  if (!spendLedger) return;
+  const snap = spendLedger.snapshot();
+  state.paidRequests = priorPaidRequests + snap.requestsStarted;
+  state.paidInputTokens = priorPaidInputTokens + snap.inputTokens;
+  saveState(state);
 }
 
 type FetchedBars = { symbol: string; closed: MarketBar[]; current: MarketBar };
@@ -402,7 +460,14 @@ async function decide(
     if (decisionTs === null) decisionTs = features.ts;
     else if (features.ts !== decisionTs) throw new Error("live decision features are not timestamp-aligned");
 
-    const signal = await evaluator.evaluate(features);
+    let signal;
+    try {
+      signal = await evaluator.evaluate(features);
+    } finally {
+      // Persist lifetime paid usage after every provider attempt so a restart
+      // cannot silently reset the paper-trading spend allowance.
+      syncPaidSpend(state);
+    }
     const roundTripCostBps =
       features.spreadBps * freeze.execution.spreadCostMultiplier +
       2 * freeze.execution.slippageBps +
@@ -466,6 +531,8 @@ while (cycles === 0 || cycle < cycles) {
         fees: 0,
         borrowCost: 0,
         fundingNet: 0,
+        paidRequests: 0,
+        paidInputTokens: 0,
         lastOpenTs: currentTs,
         lastDecisionTs: null,
         barsSinceDecision: Math.max(0, freeze.cadence.decisionEveryBars - 1),
@@ -559,7 +626,11 @@ if (state) {
     " · misses " + cache.misses +
     " · new " + evaluator.newEvaluations +
     " · fresh tokens " + evaluator.newInputTokens +
-    (spendLedger ? " · paid $" + spendLedger.snapshot().estimatedUsd.toFixed(6) : "") +
+    (paidModel
+      ? " · lifetime paid requests " + (state.paidRequests ?? 0) +
+        " · lifetime input tokens " + (state.paidInputTokens ?? 0) +
+        " · lifetime paid $" + (((state.paidInputTokens ?? 0) / 1_000_000) * usdPerMTok).toFixed(6)
+      : "") +
     " · fees $" + state.fees.toFixed(4) +
     " · borrow $" + state.borrowCost.toFixed(6) +
     " · funding $" + state.fundingNet.toFixed(6)
