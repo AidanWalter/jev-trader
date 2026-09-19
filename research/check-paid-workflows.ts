@@ -9,6 +9,69 @@ const allowed = new Set([
   "jev-direction-sealed.yml",
 ]);
 
+const exactRequirements: Record<string, string[]> = {
+  "jev-direction-canary.yml": [
+    "--horizon=8",
+    "--profile=lean",
+    "--decision-every=8",
+    "--sample=12",
+    "--max-requests=12",
+    "--max-input-tokens=30000",
+    "--reserve-input-tokens=2000",
+    "--max-usd=0.0015",
+    "--concurrency=1",
+    "Refuse duplicate paid canary",
+    "if: success()",
+    "if: failure()",
+  ],
+  "jev-direction-sample.yml": [
+    "--horizon=8",
+    "--profile=lean",
+    "--decision-every=8",
+    "--sample=240",
+    "--max-requests=240",
+    "--max-input-tokens=500000",
+    "--reserve-input-tokens=2000",
+    "--max-usd=0.025",
+    "--concurrency=1",
+    "dashboard_verified",
+    "Refuse duplicate paid sample",
+    "if: success()",
+    "if: failure()",
+  ],
+  "jev-direction-development.yml": [
+    "--model=jev-direction",
+    "--horizons=8",
+    "--profiles=lean",
+    "--decision-every=8",
+    "--direction-only=true",
+    "--max-new-evals=7000",
+    "--max-paid-requests=7000",
+    "--max-input-tokens=14000000",
+    "--reserve-tokens-per-request=2000",
+    "--max-usd=0.60",
+    "--concurrency=1",
+    "dashboard_verified",
+    "Refuse duplicate paid development expansion",
+    "Independent four-segment validation audit",
+    "if: success()",
+    "if: failure()",
+  ],
+  "jev-direction-sealed.yml": [
+    "--max-new-evals=1000",
+    "--max-paid-requests=1000",
+    "--max-input-tokens=2000000",
+    "--reserve-tokens-per-request=2000",
+    "--max-usd=0.09",
+    "--concurrency=1",
+    "dashboard_verified",
+    "Refuse duplicate sealed spend",
+    "validation-audit.json",
+    "if: success()",
+    "if: failure()",
+  ],
+};
+
 let failures = 0;
 const fail = (msg: string) => {
   failures++;
@@ -32,6 +95,9 @@ for (const name of readdirSync(dir).filter((x) => x.endsWith(".yml") || x.endsWi
     if (!text.includes("confirm_spend")) fail(name + " must require explicit spend confirmation");
     if (!text.includes("--max-usd=")) fail(name + " must pass an explicit hard dollar cap");
     if (!text.includes("--concurrency=1")) fail(name + " must run paid Jev calls serially");
+    for (const required of exactRequirements[name] ?? []) {
+      if (!text.includes(required)) fail(name + " missing pinned safety requirement: " + required);
+    }
     continue;
   }
 
