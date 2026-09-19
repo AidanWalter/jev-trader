@@ -64,9 +64,9 @@ jobs:
                   "--max-usd=0.505", "--concurrency=1",
               ],
               "jev-direction-sealed.yml": [
-                  "--max-new-evals=1000", "--max-paid-requests=1000",
-                  "--max-input-tokens=2000000", "--reserve-tokens-per-request=2000",
-                  "--max-usd=0.09", "--concurrency=1",
+                  "--max-new-evals=1752", "--max-paid-requests=1752",
+                  "--max-input-tokens=3504000", "--reserve-tokens-per-request=2000",
+                  "--max-usd=0.15", "--concurrency=1",
               ],
           }
           failures = []
@@ -76,12 +76,12 @@ jobs:
               "jev-direction-sample.yml": (192, 0.017),
               "jev-direction-sample-1000.yml": (760, 0.065),
               "jev-direction-development.yml": (5996, 0.505),
-              "jev-direction-sealed.yml": (1000, 0.09),
+              "jev-direction-sealed.yml": (1752, 0.15),
           }
-          if sum(v[0] for v in staged_caps.values()) != 7996:
-              failures.append("staged paid request ceiling changed from 7,996")
-          if sum(v[1] for v in staged_caps.values()) > 0.70:
-              failures.append("staged paid research dollar ceiling exceeds $0.70")
+          if sum(v[0] for v in staged_caps.values()) != 8748:
+              failures.append("staged paid request ceiling changed from 8,748")
+          if sum(v[1] for v in staged_caps.values()) > 0.75:
+              failures.append("staged paid research dollar ceiling exceeds $0.75")
           disabled_guard = "if: $" + "{{ false }}"
           duplicate_disabled_guard = disabled_guard + "\n    if:"
 
