@@ -45,5 +45,7 @@ jobs:
         run: bun run research:check-safe-jev
       - name: Paid workflow safety audit
         run: bun run research:check-paid-workflows
+      - name: Live paid-spend persistence audit
+        run: bun run research:check-live-spend-safety
       - name: Fill ordering regression
         run: bun run scripts/check-fill-order.ts
