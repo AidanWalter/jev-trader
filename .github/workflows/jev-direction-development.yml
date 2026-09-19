@@ -68,8 +68,20 @@ jobs:
             .metrics.brier < 0.6666667 and
             .metrics.nonFlatCount >= 40 and
             (
-              (.metrics.confidenceGates | any(.threshold >= 0.55 and .n >= 30 and .netCalledBpsPerState > 3)) or
-              (.metrics.edgeGates | any(.threshold >= 0.20 and .n >= 30 and .netCalledBpsPerState > 3))
+              (.metrics.confidenceGates | any(
+                .threshold >= 0.55 and
+                .n >= 30 and
+                .netCalledBpsPerState > 3 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              )) or
+              (.metrics.edgeGates | any(
+                .threshold >= 0.20 and
+                .n >= 30 and
+                .netCalledBpsPerState > 3 and
+                .positiveTimeQuartiles >= 3 and
+                .positiveSymbols >= 2
+              ))
             )
           ' "$RESULT" >/dev/null
           mkdir -p data/dev
