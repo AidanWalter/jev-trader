@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   canary:
@@ -26,15 +27,53 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
 
-      - name: Download fixed public BTC ETH SOL universe
+      - name: Download exact frozen BTC ETH SOL universe
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: data/canary
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+
+      - name: Verify exact frozen market artifact
         run: |
-          bun run scripts/download-binance-universe.ts \
-            --symbols=BTCUSDT,ETHUSDT,SOLUSDT \
-            --interval=1h \
-            --start=2024-01-01 \
-            --end=2026-09-01 \
-            --out-dir=data/canary/universe \
-            --manifest=data/canary/universe/universe.json
+          test -s data/canary/universe/universe.json
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h" and
+            .start == "2024-01-01" and
+            .end == "2026-09-01"
+          ' data/canary/universe/universe.json >/dev/null
+
+      - name: Refuse duplicate paid canary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=jev-direction-canary-v1" --jq '.total_count')"
+          if [ "$COUNT" != "0" ]; then
+            echo "jev-direction-canary-v1 already exists; refusing duplicate paid canary"
+            exit 1
+          fi
+
+      - name: Download already-paid full-Jev reference cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Verify reference cache
+        run: |
+          test -s data/reference/portfolio-pilot-cache.jsonl
+          test -s data/reference/portfolio-pilot-summary.json
+          jq -e '
+            .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
+          ' data/reference/portfolio-pilot-summary.json >/dev/null
 
       - name: Zero-call spend plan
         run: |
@@ -60,13 +99,16 @@ jobs:
             --max-usd=0.0015 \
             --usd-per-mtok=0.042 \
             --concurrency=1 \
+            --reference-cache=data/reference/portfolio-pilot-cache.jsonl \
+            --reference-profile=path \
+            --reference-model=jev \
             --cache=data/canary/jev-direction-cache.jsonl \
             --out=data/canary/jev-direction-canary.json | tee data/canary/canary-output.txt
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
-          name: jev-direction-canary-${{ github.run_id }}
+          name: jev-direction-canary-v1
           path: |
             data/canary/universe/
             data/canary/spend-plan.txt
@@ -74,3 +116,11 @@ jobs:
             data/canary/jev-direction-canary.json
             data/canary/canary-output.txt
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jev-direction-canary-failed-${{ github.run_id }}
+          path: |
+            data/
+          retention-days: 14
+
