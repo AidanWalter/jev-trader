@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
-import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
+import { BudgetedEvaluator, defaultSpendBudget, remainingSpendBudget, SpendBudgetExceededError, SpendBudgetLedger } from "./budget";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
@@ -57,6 +57,8 @@ interface PaperState {
   quantities: Record<string, number>;
   fees: number;
   borrowCost: number;
+  paidRequests?: number;
+  paidInputTokens?: number;
   lastOpenTs: number;
   lastDecisionTs: number | null;
   barsSinceDecision: number;
@@ -112,25 +114,63 @@ const paidModel = freeze.evaluator.kind.startsWith("jev");
 if (paidModel && flag("confirm-paid", "false") !== "true") {
   throw new Error("paid Jev live paper is locked; pass --confirm-paid=true with explicit spend caps");
 }
-const maxNewEvaluations = Math.max(
+const lifetimeMaxNewEvaluations = Math.max(
   0,
   Number(flag("max-new-evals", paidModel ? "12" : "1000000000")),
 );
-const spendLedger = paidModel
-  ? new SpendBudgetLedger(defaultSpendBudget({
-      maxRequests: Math.max(1, Number(flag("max-paid-requests", "12"))),
-      maxInputTokens: Math.max(1, Number(flag("max-input-tokens", "30000"))),
-      maxUsd: Math.max(0.000001, Number(flag("max-usd", "0.002"))),
-      usdPerMTok: Number(flag("usd-per-mtok", "0.042")),
-      reserveTokensPerRequest: Math.max(1, Number(flag("reserve-tokens-per-request", "2000"))),
-    }))
-  : null;
+const lifetimeMaxPaidRequests = Math.max(0, Number(flag("max-paid-requests", "12")));
+const lifetimeMaxInputTokens = Math.max(0, Number(flag("max-input-tokens", "30000")));
+const lifetimeMaxUsd = Math.max(0, Number(flag("max-usd", "0.002")));
+const usdPerMTok = Number(flag("usd-per-mtok", "0.042"));
+const reserveTokensPerRequest = Math.max(1, Number(flag("reserve-tokens-per-request", "2000")));
 
+let priorPaidRequests = 0;
+let priorPaidInputTokens = 0;
+if (paidModel && existsSync(statePath)) {
+  try {
+    const prior = JSON.parse(readFileSync(statePath, "utf8")) as Partial<PaperState>;
+    if (prior.freezeSha256 === freezeSha256 && prior.evaluatorNamespace === freeze.evaluator.namespace) {
+      priorPaidRequests = Math.max(0, Number(prior.paidRequests ?? 0));
+      priorPaidInputTokens = Math.max(0, Number(prior.paidInputTokens ?? 0));
+    }
+  } catch {
+    // loadState() below remains authoritative.
+  }
+}
+
+const lifetimeBudget = defaultSpendBudget({
+  maxRequests: lifetimeMaxPaidRequests,
+  maxInputTokens: lifetimeMaxInputTokens,
+  maxUsd: lifetimeMaxUsd,
+  usdPerMTok,
+  reserveTokensPerRequest,
+});
+const remainingBudget = paidModel
+  ? remainingSpendBudget(lifetimeBudget, {
+      requests: priorPaidRequests,
+      inputTokens: priorPaidInputTokens,
+    })
+  : null;
+const remainingNewEvaluations = paidModel
+  ? Math.max(
+      0,
+      Math.min(
+        lifetimeMaxNewEvaluations - priorPaidRequests,
+        remainingBudget?.maxRequests ?? 0,
+      ),
+    )
+  : lifetimeMaxNewEvaluations;
+
+if (paidModel && (!remainingBudget || remainingNewEvaluations <= 0)) {
+  throw new SpendBudgetExceededError("paid Jev live-paper lifetime budget is exhausted for this persisted state");
+}
+
+const spendLedger = paidModel && remainingBudget ? new SpendBudgetLedger(remainingBudget) : null;
 const raw = createReplayEvaluator(freeze.evaluator.kind, freeze.evaluator.profile);
 if (raw.name !== freeze.evaluator.namespace) throw new Error("evaluator namespace differs from frozen stock apparatus");
 const paidRaw = spendLedger ? new BudgetedEvaluator(raw, spendLedger) : raw;
 const cache = new JsonlSignalCache(cachePath);
-const evaluator = new CachedEvaluator(paidRaw, cache, maxNewEvaluations);
+const evaluator = new CachedEvaluator(paidRaw, cache, remainingNewEvaluations);
 
 const featureConfig = {
   ...defaultFeatureConfig,
@@ -165,7 +205,17 @@ function loadState(): PaperState | null {
     state.interval !== interval ||
     state.symbols.join("|") !== freeze.universe.symbols.join("|")
   ) throw new Error("stock paper state does not match frozen apparatus");
+  state.paidRequests = Math.max(0, Number(state.paidRequests ?? 0));
+  state.paidInputTokens = Math.max(0, Number(state.paidInputTokens ?? 0));
   return state;
+}
+
+function syncPaidSpend(state: PaperState) {
+  if (!spendLedger) return;
+  const snap = spendLedger.snapshot();
+  state.paidRequests = priorPaidRequests + snap.requestsStarted;
+  state.paidInputTokens = priorPaidInputTokens + snap.inputTokens;
+  saveState(state);
 }
 
 async function fetchSymbolBars(symbol: string): Promise<FetchedBars> {
@@ -368,7 +418,12 @@ async function decide(state: PaperState, closedBySymbol: Map<string, MarketBar[]
     if (decisionTs === null) decisionTs = features.ts;
     else if (features.ts !== decisionTs) throw new Error("stock feature states are not timestamp-aligned");
 
-    const signal = await evaluator.evaluate(features);
+    let signal;
+    try {
+      signal = await evaluator.evaluate(features);
+    } finally {
+      syncPaidSpend(state);
+    }
     const currentExposure = currentExposures[symbol] ?? 0;
     const roundTripCostBps =
       features.spreadBps * freeze.execution.spreadCostMultiplier +
@@ -436,6 +491,8 @@ while (cycles === 0 || cycle < cycles) {
         quantities: Object.fromEntries(freeze.universe.symbols.map((s) => [s, 0])),
         fees: 0,
         borrowCost: 0,
+        paidRequests: 0,
+        paidInputTokens: 0,
         lastOpenTs: initialTs,
         lastDecisionTs: null,
         barsSinceDecision: Math.max(0, freeze.cadence.decisionEveryBars - 1),
@@ -507,7 +564,16 @@ while (cycles === 0 || cycle < cycles) {
       console.log("stock market closed or no synchronized live regular-session bar · no simulated action");
     }
   } catch (e) {
-    console.error("frozen Yahoo stock paper loop:", (e as Error).message);
+    const error = e as Error;
+    const message = error.message ?? String(e);
+    console.error("frozen Yahoo stock paper loop:", message);
+    if (
+      e instanceof SpendBudgetExceededError ||
+      (paidModel && /(^|\D)402(\D|$)|no available api credits|payment required/i.test(message))
+    ) {
+      console.error("paid Jev live paper stopped before any further provider call");
+      break;
+    }
   }
 
   if (cycles !== 0 && cycle >= cycles) break;
@@ -523,6 +589,11 @@ if (state) {
     " · misses " + cache.misses +
     " · new " + evaluator.newEvaluations +
     " · fresh tokens " + evaluator.newInputTokens +
+    (paidModel
+      ? " · lifetime paid requests " + (state.paidRequests ?? 0) +
+        " · lifetime input tokens " + (state.paidInputTokens ?? 0) +
+        " · lifetime paid $" + (((state.paidInputTokens ?? 0) / 1_000_000) * usdPerMTok).toFixed(6)
+      : "") +
     " · fees $" + state.fees.toFixed(4) +
     " · borrow $" + state.borrowCost.toFixed(6)
   );
