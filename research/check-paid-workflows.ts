@@ -79,6 +79,10 @@ const exactRequirements: Record<string, string[]> = {
     "dashboard_verified",
     "dashboard_request_delta",
     "dashboard_input_token_delta",
+    ".metrics.brier < 0.6666667",
+    ".metrics.nonFlatCount >= 150",
+    ".positiveTimeQuartiles >= 3",
+    ".positiveSymbols >= 2",
     "Refuse duplicate 1000-state spend",
     "if: success()",
     "if: failure()",
@@ -127,7 +131,8 @@ const stagedResearchCaps = {
   "jev-direction-canary.yml": { requests: 12, usd: 0.0015 },
   "jev-direction-sample-48.yml": { requests: 36, usd: 0.004 },
   "jev-direction-sample.yml": { requests: 192, usd: 0.017 },
-  "jev-direction-development.yml": { requests: 6756, usd: 0.57 },
+  "jev-direction-sample-1000.yml": { requests: 760, usd: 0.065 },
+  "jev-direction-development.yml": { requests: 5996, usd: 0.505 },
   "jev-direction-sealed.yml": { requests: 1000, usd: 0.09 },
 };
 const totalStagedRequests = Object.values(stagedResearchCaps)
