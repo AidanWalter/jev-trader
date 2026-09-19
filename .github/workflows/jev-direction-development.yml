@@ -4,21 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       sample_run_id:
-        description: Successful jev-direction-sample run ID
+        description: Successful jev-direction-sample-1000 run ID
         required: true
       dashboard_verified:
-        description: I checked TypeSafe billing for the 240-state sample and it matched the artifact closely
+        description: I checked TypeSafe billing for the 1000-state sample and it matched the artifact closely
         required: true
         type: boolean
         default: false
       dashboard_request_delta:
-        description: Exact TypeSafe request-count increase caused by the 240-state sample
+        description: Exact TypeSafe request-count increase caused by the 1000-state sample
         required: true
       dashboard_input_token_delta:
-        description: TypeSafe input-token increase caused by the 240-state sample
+        description: TypeSafe input-token increase caused by the 1000-state sample
         required: true
       confirm_spend:
-        description: I approve one fixed direction-only development pass under a hard $0.57 ledger cap
+        description: I approve one fixed direction-only development pass under a hard $0.505 ledger cap
         required: true
         type: boolean
         default: false
@@ -44,7 +44,7 @@ jobs:
       - name: Download exact verified sample artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-sample-stage48-*
+          pattern: jev-direction-sample1000-stage240-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -54,7 +54,7 @@ jobs:
       - name: Verify sample identity and signal gate
         run: |
           set -euo pipefail
-          RESULT="$(find prior -name jev-direction-sample.json -print -quit)"
+          RESULT="$(find prior -name result.json -print -quit)"
           CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
           MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
           test -n "$RESULT"
@@ -65,26 +65,26 @@ jobs:
             .horizonBars == 8 and
             .profile == "lean" and
             .decisionEveryBars == 8 and
-            .sampleCount == 240 and
-            .preCachedSampleStates >= 48 and
-            .freshStatesRequired <= 192 and
-            .budget.requestsStarted <= 192 and
-            .budget.estimatedUsd <= 0.017 and
+            .sampleCount == 1000 and
+            .preCachedSampleStates >= 240 and
+            .freshStatesRequired <= 760 and
+            .budget.requestsStarted <= 760 and
+            .budget.estimatedUsd <= 0.065 and
             .metrics.avgInputTokens <= 1600 and
             .metrics.brier < 0.6666667 and
-            .metrics.nonFlatCount >= 40 and
+            .metrics.nonFlatCount >= 150 and
             (
               (.metrics.confidenceGates | any(
                 .threshold >= 0.55 and
-                .n >= 30 and
-                .netCalledBpsPerState > 3 and
+                .n >= 100 and
+                .netCalledBpsPerState > 2 and
                 .positiveTimeQuartiles >= 3 and
                 .positiveSymbols >= 2
               )) or
               (.metrics.edgeGates | any(
                 .threshold >= 0.20 and
-                .n >= 30 and
-                .netCalledBpsPerState > 3 and
+                .n >= 100 and
+                .netCalledBpsPerState > 2 and
                 .positiveTimeQuartiles >= 3 and
                 .positiveSymbols >= 2
               ))
@@ -118,8 +118,8 @@ jobs:
             --horizon=8 \
             --decision-every=8 \
             --tokens-per-request=2000 | tee data/dev/spend-plan.txt
-          echo "Hard paid limits: 6756 fresh requests, 13,512,000 input tokens, $0.57."
-          echo "The 240 nested sample states must already be cache hits; otherwise the pilot refuses to start."
+          echo "Hard paid limits: 5996 fresh requests, 11,992,000 input tokens, $0.505."
+          echo "The 1000 nested sample states must already be cache hits; otherwise the pilot refuses to start."
 
       - name: Refuse duplicate paid development expansion
         env:
@@ -149,11 +149,11 @@ jobs:
             --allow-short=false \
             --require-complete-grid=true \
             --concurrency=1 \
-            --max-new-evals=6756 \
-            --max-paid-requests=6756 \
-            --max-input-tokens=13512000 \
+            --max-new-evals=5996 \
+            --max-paid-requests=5996 \
+            --max-input-tokens=11992000 \
             --reserve-tokens-per-request=2000 \
-            --max-usd=0.57 \
+            --max-usd=0.505 \
             --usd-per-mtok=0.042 \
             --cache=data/dev/jev-direction-cache.jsonl \
             --out=data/dev/pilot.json | tee data/dev/pilot-output.txt
