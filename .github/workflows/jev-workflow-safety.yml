@@ -37,24 +37,25 @@ jobs:
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=12", "--max-requests=12", "--max-input-tokens=30000",
                   "--reserve-input-tokens=2000", "--max-usd=0.0015", "--concurrency=1",
+                  "jev-credit-reference-v1", "run-id: 35420536540", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample-48.yml": [
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=48", "--min-cache-hits=12", "--max-requests=36",
                   "--max-input-tokens=80000", "--reserve-input-tokens=2000",
-                  "--max-usd=0.004", "--concurrency=1",
+                  "--max-usd=0.004", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample.yml": [
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=240", "--min-cache-hits=48", "--max-requests=192",
                   "--max-input-tokens=384000", "--reserve-input-tokens=2000",
-                  "--max-usd=0.017", "--concurrency=1",
+                  "--max-usd=0.017", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-sample-1000.yml": [
                   "--horizon=8", "--profile=lean", "--decision-every=8",
                   "--sample=1000", "--min-cache-hits=240", "--max-requests=760",
                   "--max-input-tokens=1520000", "--reserve-input-tokens=2000",
-                  "--max-usd=0.065", "--concurrency=1",
+                  "--max-usd=0.065", "--concurrency=1", "reference-full-jev-cache.jsonl",
               ],
               "jev-direction-development.yml": [
                   "--model=jev-direction", "--horizons=8", "--profiles=lean",
