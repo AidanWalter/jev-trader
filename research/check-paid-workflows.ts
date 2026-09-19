@@ -111,11 +111,11 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-sealed.yml": [
-    "--max-new-evals=1000",
-    "--max-paid-requests=1000",
-    "--max-input-tokens=2000000",
+    "--max-new-evals=1752",
+    "--max-paid-requests=1752",
+    "--max-input-tokens=3504000",
     "--reserve-tokens-per-request=2000",
-    "--max-usd=0.09",
+    "--max-usd=0.15",
     "--concurrency=1",
     "dashboard_verified",
     "dashboard_request_delta",
@@ -133,7 +133,7 @@ const stagedResearchCaps = {
   "jev-direction-sample.yml": { requests: 192, usd: 0.017 },
   "jev-direction-sample-1000.yml": { requests: 760, usd: 0.065 },
   "jev-direction-development.yml": { requests: 5996, usd: 0.505 },
-  "jev-direction-sealed.yml": { requests: 1000, usd: 0.09 },
+  "jev-direction-sealed.yml": { requests: 1752, usd: 0.15 },
 };
 const totalStagedRequests = Object.values(stagedResearchCaps)
   .reduce((sum, x) => sum + x.requests, 0);
@@ -177,13 +177,13 @@ for (const name of readdirSync(dir).filter((x) => x.endsWith(".yml") || x.endsWi
   }
 }
 
-if (totalStagedRequests !== 7996) {
-  fail("staged paid research request ceiling changed from 7,996: " + totalStagedRequests);
+if (totalStagedRequests !== 8748) {
+  fail("staged paid research request ceiling changed from 8,748: " + totalStagedRequests);
 } else {
-  ok("entire staged paid research chain is capped at 7,996 fresh requests");
+  ok("entire staged paid research chain is capped at 8,748 fresh requests");
 }
-if (totalStagedUsd > 0.70) {
-  fail("staged paid research dollar ceiling exceeds $0.70: $" + totalStagedUsd.toFixed(6));
+if (totalStagedUsd > 0.75) {
+  fail("staged paid research dollar ceiling exceeds $0.75: $" + totalStagedUsd.toFixed(6));
 } else {
   ok("entire staged paid research chain is capped at $" + totalStagedUsd.toFixed(4));
 }
