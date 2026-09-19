@@ -51,23 +51,13 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.sample48_run_id }}
 
-      - name: Download already-paid full-Jev reference cache
-        uses: actions/download-artifact@v4
-        with:
-          pattern: generation2-jev-pilot-35389450141
-          path: reference
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35389450141
-
       - name: Verify and restore exact 48-state dataset and cache
         run: |
           set -euo pipefail
           RESULT="$(find prior -name result.json -print -quit)"
           CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
           MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
-          REFERENCE_CACHE="$(find reference -type f -name '*cache*.jsonl' -print -quit)"
+          REFERENCE_CACHE="$(find prior -type f -name 'reference-full-jev-cache.jsonl' -print -quit)"
           test -n "$RESULT"
           test -n "$CACHE"
           test -n "$MANIFEST"
@@ -183,7 +173,8 @@ jobs:
             data/sample/jev-direction-cache.jsonl
             data/sample/jev-direction-sample.json
             data/sample/sample-output.txt
-          retention-days: 30
+            data/sample/reference-full-jev-cache.jsonl
+          retention-days: 90
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
