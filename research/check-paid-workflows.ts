@@ -13,6 +13,7 @@ const allowed = new Set([
 
 const exactRequirements: Record<string, string[]> = {
   "jev-direction-canary.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "--horizon=8",
     "--profile=lean",
     "--decision-every=8",
@@ -30,6 +31,7 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-sample-48.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "--horizon=8",
     "--profile=lean",
     "--decision-every=8",
@@ -50,6 +52,7 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-sample.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "--horizon=8",
     "--profile=lean",
     "--decision-every=8",
@@ -71,6 +74,7 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-sample-1000.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "--horizon=8",
     "--profile=lean",
     "--decision-every=8",
@@ -94,6 +98,7 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-development.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "--model=jev-direction",
     "--horizons=8",
     "--profiles=lean",
@@ -122,6 +127,7 @@ const exactRequirements: Record<string, string[]> = {
     "if: failure()",
   ],
   "jev-direction-sealed.yml": [
+    "ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2",
     "MAX_REQ=1752",
     "MAX_TOK=3504000",
     "SEALED_REMAINING_REQ",
