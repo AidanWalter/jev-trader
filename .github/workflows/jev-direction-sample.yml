@@ -3,16 +3,16 @@ name: jev-direction-sample
 on:
   workflow_dispatch:
     inputs:
-      canary_run_id:
-        description: Successful jev-direction-canary run ID whose dashboard usage you personally verified
+      sample48_run_id:
+        description: Successful jev-direction-sample-48 run ID whose TypeSafe dashboard usage you personally verified
         required: true
       dashboard_verified:
-        description: I checked TypeSafe billing and the canary usage matched the artifact closely
+        description: I checked TypeSafe billing for the 48-state stage and it matched the artifact closely
         required: true
         type: boolean
         default: false
       confirm_spend:
-        description: I approve at most 240 fresh requests under a hard $0.025 ledger cap
+        description: I approve at most 192 fresh requests under a hard $0.017 ledger cap
         required: true
         type: boolean
         default: false
@@ -35,51 +35,66 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
 
-      - name: Download personally verified canary artifact
+      - name: Download personally verified 48-state artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-canary-v1
+          pattern: jev-direction-sample48-canary-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.canary_run_id }}
+          run-id: ${{ inputs.sample48_run_id }}
 
-      - name: Verify and restore exact canary dataset and cache
+      - name: Download already-paid full-Jev reference cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Verify and restore exact 48-state dataset and cache
         run: |
           set -euo pipefail
-          RESULT="$(find prior -name jev-direction-canary.json -print -quit)"
+          RESULT="$(find prior -name result.json -print -quit)"
           CACHE="$(find prior -name jev-direction-cache.jsonl -print -quit)"
           MANIFEST="$(find prior -path '*/universe/universe.json' -print -quit)"
+          REFERENCE_CACHE="$(find reference -type f -name '*cache*.jsonl' -print -quit)"
           test -n "$RESULT"
           test -n "$CACHE"
           test -n "$MANIFEST"
+          test -n "$REFERENCE_CACHE"
           jq -e '
             .version == "safe-jev-direction-probe-v1" and
             .horizonBars == 8 and
             .profile == "lean" and
             .decisionEveryBars == 8 and
-            .sampleCount == 12 and
-            .budget.requestsStarted <= 12 and
-            .budget.estimatedUsd <= 0.0015 and
+            .sampleCount == 48 and
+            .preCachedSampleStates >= 12 and
+            .freshStatesRequired <= 36 and
+            .budget.requestsStarted <= 36 and
+            .budget.estimatedUsd <= 0.004 and
             .metrics.avgInputTokens <= 1600
           ' "$RESULT" >/dev/null
           mkdir -p data/sample
           cp -R "$(dirname "$MANIFEST")" data/sample/universe
           cp "$CACHE" data/sample/jev-direction-cache.jsonl
-          cp "$RESULT" data/sample/canary.json
+          cp "$RESULT" data/sample/sample48.json
+          cp "$REFERENCE_CACHE" data/sample/reference-full-jev-cache.jsonl
 
       - name: Print zero-call expanded sample budget
         run: |
-          echo "Hard limits: 240 fresh requests, 500000 input tokens, $0.025."
-          echo "The first 12 deterministic sample states are already cached from the verified canary."
-          echo "At the 2000-token reservation, the full 240-request worst-case reservation is 480000 tokens = $0.02016 at $0.042/MTok."
+          echo "Hard limits: 192 fresh requests, 384000 input tokens, $0.017."
+          echo "The first 48 deterministic states are already cached from the verified prior stage."
+          echo "The remaining 192 fresh requests reserve at most 384000 tokens = $0.016128 at $0.042/MTok."
 
       - name: Refuse duplicate paid sample
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NAME="jev-direction-sample-canary-${{ inputs.canary_run_id }}"
+          NAME="jev-direction-sample-stage48-${{ inputs.sample48_run_id }}"
           COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$NAME" --jq '.total_count')"
           if [ "$COUNT" != "0" ]; then
             echo "$NAME already exists; refusing duplicate paid sample"
@@ -97,22 +112,36 @@ jobs:
             --profile=lean \
             --decision-every=8 \
             --sample=240 \
-            --max-requests=240 \
-            --max-input-tokens=500000 \
+            --min-cache-hits=48 \
+            --max-requests=192 \
+            --max-input-tokens=384000 \
             --reserve-input-tokens=2000 \
-            --max-usd=0.025 \
+            --max-usd=0.017 \
             --usd-per-mtok=0.042 \
             --concurrency=1 \
+            --reference-cache=data/sample/reference-full-jev-cache.jsonl \
+            --reference-profile=path \
+            --reference-model=jev \
             --cache=data/sample/jev-direction-cache.jsonl \
             --out=data/sample/jev-direction-sample.json | tee data/sample/sample-output.txt
+
+      - name: Verify true nested expansion
+        run: |
+          jq -e --slurpfile prior data/sample/sample48.json '
+            .sampleCount == 240 and
+            .preCachedSampleStates >= 48 and
+            .freshStatesRequired <= 192 and
+            .budget.requestsStarted <= 192 and
+            (.sampleStateIds[0:48] == $prior[0].sampleStateIds)
+          ' data/sample/jev-direction-sample.json >/dev/null
 
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: jev-direction-sample-canary-${{ inputs.canary_run_id }}
+          name: jev-direction-sample-stage48-${{ inputs.sample48_run_id }}
           path: |
             data/sample/universe/
-            data/sample/canary.json
+            data/sample/sample48.json
             data/sample/jev-direction-cache.jsonl
             data/sample/jev-direction-sample.json
             data/sample/sample-output.txt
@@ -124,4 +153,3 @@ jobs:
           path: |
             data/
           retention-days: 14
-
