@@ -26,6 +26,7 @@ jobs:
           root = Path(".github/workflows")
           allowed = {
               "jev-direction-canary.yml",
+              "jev-direction-sample-48.yml",
               "jev-direction-sample.yml",
               "jev-direction-development.yml",
               "jev-direction-sealed.yml",
