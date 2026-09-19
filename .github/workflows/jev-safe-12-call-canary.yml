@@ -9,8 +9,7 @@ permissions:
 
 jobs:
   canary:
-    if: ${{ false }} # RETIRED: use staged jev-direction-* workflows only
-    # Deliberately locked. Remove only after the user confirms new credits exist.
+    # RETIRED: use staged jev-direction-* workflows only.
     if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
