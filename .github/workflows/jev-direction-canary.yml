@@ -57,6 +57,24 @@ jobs:
             exit 1
           fi
 
+      - name: Download already-paid full-Jev reference cache
+        uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: data/reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+
+      - name: Verify reference cache
+        run: |
+          test -s data/reference/portfolio-pilot-cache.jsonl
+          test -s data/reference/portfolio-pilot-summary.json
+          jq -e '
+            .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
+          ' data/reference/portfolio-pilot-summary.json >/dev/null
+
       - name: Zero-call spend plan
         run: |
           bun run research/jev-spend-plan.ts data/canary/universe/universe.json \
@@ -81,6 +99,9 @@ jobs:
             --max-usd=0.0015 \
             --usd-per-mtok=0.042 \
             --concurrency=1 \
+            --reference-cache=data/reference/portfolio-pilot-cache.jsonl \
+            --reference-profile=path \
+            --reference-model=jev \
             --cache=data/canary/jev-direction-cache.jsonl \
             --out=data/canary/jev-direction-canary.json | tee data/canary/canary-output.txt
 
