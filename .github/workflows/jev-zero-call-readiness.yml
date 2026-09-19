@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/replay-lab
+          ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
