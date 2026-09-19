@@ -1,0 +1,62 @@
+name: preserve-jev-paid-reference
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/preserve-jev-paid-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-free-scan-35388923207
+          path: source-market
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35388923207
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: generation2-jev-pilot-35389450141
+          path: source-reference
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35389450141
+      - name: Build durable paid-reference bundle
+        run: |
+          set -euo pipefail
+          MANIFEST="$(find source-market -path '*/universe/universe.json' -print -quit)"
+          CACHE="$(find source-reference -type f -name '*cache*.jsonl' -print -quit)"
+          SUMMARY="$(find source-reference -type f -name 'portfolio-pilot-summary.json' -print -quit)"
+          test -n "$MANIFEST"
+          test -n "$CACHE"
+          test -n "$SUMMARY"
+          mkdir -p preserved/universe
+          cp -R "$(dirname "$MANIFEST")/." preserved/universe/
+          cp "$CACHE" preserved/reference-full-jev-cache.jsonl
+          cp "$SUMMARY" preserved/reference-full-jev-summary.json
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h" and
+            .start == "2024-01-01" and
+            .end == "2026-09-01"
+          ' preserved/universe/universe.json >/dev/null
+          jq -e '
+            .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
+          ' preserved/reference-full-jev-summary.json >/dev/null
+          echo "Preserved $(wc -l < preserved/reference-full-jev-cache.jsonl) already-paid Jev cache records."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jev-credit-reference-v1
+          path: preserved/
+          retention-days: 90
