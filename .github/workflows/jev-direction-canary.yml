@@ -27,25 +27,30 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
 
-      - name: Download exact frozen BTC ETH SOL universe
+      - name: Download durable market and already-paid Jev reference bundle
         uses: actions/download-artifact@v4
         with:
-          pattern: generation2-free-scan-35388923207
+          pattern: jev-credit-reference-v1
           path: data/canary
           merge-multiple: true
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: 35388923207
+          run-id: 35420536540
 
-      - name: Verify exact frozen market artifact
+      - name: Verify durable frozen market and reference artifact
         run: |
           test -s data/canary/universe/universe.json
+          test -s data/canary/reference-full-jev-cache.jsonl
+          test -s data/canary/reference-full-jev-summary.json
           jq -e '
             .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
             .interval == "1h" and
             .start == "2024-01-01" and
             .end == "2026-09-01"
           ' data/canary/universe/universe.json >/dev/null
+          jq -e '
+            .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
+          ' data/canary/reference-full-jev-summary.json >/dev/null
 
       - name: Refuse duplicate paid canary
         env:
@@ -56,24 +61,6 @@ jobs:
             echo "jev-direction-canary-v1 already exists; refusing duplicate paid canary"
             exit 1
           fi
-
-      - name: Download already-paid full-Jev reference cache
-        uses: actions/download-artifact@v4
-        with:
-          pattern: generation2-jev-pilot-35389450141
-          path: data/reference
-          merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: 35389450141
-
-      - name: Verify reference cache
-        run: |
-          test -s data/reference/portfolio-pilot-cache.jsonl
-          test -s data/reference/portfolio-pilot-summary.json
-          jq -e '
-            .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
-          ' data/reference/portfolio-pilot-summary.json >/dev/null
 
       - name: Zero-call spend plan
         run: |
@@ -99,7 +86,7 @@ jobs:
             --max-usd=0.0015 \
             --usd-per-mtok=0.042 \
             --concurrency=1 \
-            --reference-cache=data/reference/portfolio-pilot-cache.jsonl \
+            --reference-cache=data/canary/reference-full-jev-cache.jsonl \
             --reference-profile=path \
             --reference-model=jev \
             --cache=data/canary/jev-direction-cache.jsonl \
@@ -115,7 +102,9 @@ jobs:
             data/canary/jev-direction-cache.jsonl
             data/canary/jev-direction-canary.json
             data/canary/canary-output.txt
-          retention-days: 30
+            data/canary/reference-full-jev-cache.jsonl
+            data/canary/reference-full-jev-summary.json
+          retention-days: 90
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
