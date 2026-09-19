@@ -210,6 +210,27 @@ jobs:
             --usd-per-mtok=0.042 \
             --out=data/sealed/result.json | tee data/sealed/output.txt
 
+      - name: Apply predeclared sealed go-no-go gate
+        run: |
+          set -euo pipefail
+          jq -e '
+            .version == "portfolio-sealed-result-v1" and
+            .result.returnPct > 0 and
+            .result.maxDrawdownPct >= -10 and
+            (.result.fills | length) >= 20 and
+            .diagnostics.turnoverPerDay <= 1.5 and
+            .diagnostics.signal.overall.meanCalledSideReturnBps > 0
+          ' data/sealed/result.json >/dev/null
+          {
+            echo "SEALED GO"
+            echo "Predeclared criteria passed:"
+            echo "return > 0%"
+            echo "max drawdown >= -10%"
+            echo "fills >= 20"
+            echo "turnover <= 1.5x/day"
+            echo "raw Jev called-side forward return > 0 bps"
+          } | tee data/sealed/go-no-go.txt
+
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -223,6 +244,7 @@ jobs:
             data/sealed/preflight.txt
             data/sealed/output.txt
             data/sealed/result.json
+            data/sealed/go-no-go.txt
           retention-days: 90
       - uses: actions/upload-artifact@v4
         if: failure()
