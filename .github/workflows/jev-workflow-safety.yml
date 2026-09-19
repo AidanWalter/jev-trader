@@ -31,6 +31,37 @@ jobs:
               "jev-direction-development.yml",
               "jev-direction-sealed.yml",
           }
+          exact = {
+              "jev-direction-canary.yml": [
+                  "--horizon=8", "--profile=lean", "--decision-every=8",
+                  "--sample=12", "--max-requests=12", "--max-input-tokens=30000",
+                  "--reserve-input-tokens=2000", "--max-usd=0.0015", "--concurrency=1",
+              ],
+              "jev-direction-sample-48.yml": [
+                  "--horizon=8", "--profile=lean", "--decision-every=8",
+                  "--sample=48", "--min-cache-hits=12", "--max-requests=36",
+                  "--max-input-tokens=80000", "--reserve-input-tokens=2000",
+                  "--max-usd=0.004", "--concurrency=1",
+              ],
+              "jev-direction-sample.yml": [
+                  "--horizon=8", "--profile=lean", "--decision-every=8",
+                  "--sample=240", "--min-cache-hits=48", "--max-requests=192",
+                  "--max-input-tokens=384000", "--reserve-input-tokens=2000",
+                  "--max-usd=0.017", "--concurrency=1",
+              ],
+              "jev-direction-development.yml": [
+                  "--model=jev-direction", "--horizons=8", "--profiles=lean",
+                  "--decision-every=8", "--direction-only=true",
+                  "--max-new-evals=6756", "--max-paid-requests=6756",
+                  "--max-input-tokens=13512000", "--reserve-tokens-per-request=2000",
+                  "--max-usd=0.57", "--concurrency=1",
+              ],
+              "jev-direction-sealed.yml": [
+                  "--max-new-evals=1000", "--max-paid-requests=1000",
+                  "--max-input-tokens=2000000", "--reserve-tokens-per-request=2000",
+                  "--max-usd=0.09", "--concurrency=1",
+              ],
+          }
           failures = []
           disabled_guard = "if: $" + "{{ false }}"
           duplicate_disabled_guard = disabled_guard + "\n    if:"
@@ -58,6 +89,9 @@ jobs:
                       failures.append(f"{path.name}: paid calls must remain serial")
                   if re.search(r"^    env:\n      TYPESAFE_AI_API_KEY:", text, re.M):
                       failures.append(f"{path.name}: Jev secret exposed at job scope")
+                  for required in exact.get(path.name, []):
+                      if required not in text:
+                          failures.append(f"{path.name}: missing pinned safety requirement: {required}")
               else:
                   if disabled_guard not in text:
                       failures.append(f"{path.name}: legacy paid workflow is not hard-disabled")
