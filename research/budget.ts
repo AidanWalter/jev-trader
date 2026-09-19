@@ -8,6 +8,34 @@ export interface SpendBudget {
   reserveTokensPerRequest: number;
 }
 
+export interface ConsumedSpend {
+  requests: number;
+  inputTokens: number;
+}
+
+export function remainingSpendBudget(
+  lifetime: SpendBudget,
+  consumed: ConsumedSpend,
+): SpendBudget | null {
+  const requests = Math.max(0, Math.floor(consumed.requests));
+  const inputTokens = Math.max(0, consumed.inputTokens);
+  const usedUsd = inputTokens / 1_000_000 * lifetime.usdPerMTok;
+  const remaining: SpendBudget = {
+    ...lifetime,
+    maxRequests: Math.max(0, lifetime.maxRequests - requests),
+    maxInputTokens: Math.max(0, lifetime.maxInputTokens - inputTokens),
+    maxUsd: Math.max(0, lifetime.maxUsd - usedUsd),
+  };
+  const dollarTokenCeiling =
+    remaining.maxUsd / remaining.usdPerMTok * 1_000_000;
+  if (
+    remaining.maxRequests < 1 ||
+    remaining.maxInputTokens < remaining.reserveTokensPerRequest ||
+    dollarTokenCeiling < remaining.reserveTokensPerRequest
+  ) return null;
+  return remaining;
+}
+
 export interface SpendSnapshot {
   requestsStarted: number;
   requestsCompleted: number;
