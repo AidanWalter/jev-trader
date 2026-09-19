@@ -3,6 +3,7 @@ import { JsonlSignalCache } from "./cache";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
 import { chronologicalRanges } from "./splits";
+import { portfolioStateIds, stateSetDigest } from "./state-set";
 import type { InputProfile } from "./profiles";
 import { alignUniverse, fingerprintUniverse, loadUniverse } from "./universe";
 
@@ -16,6 +17,12 @@ interface FreezeRecord {
     directionThresholdFixedCostBps: number;
   };
   cadence: { decisionEveryBars: number };
+  stateSets?: {
+    train: { count: number; sha256: string };
+    validation: { count: number; sha256: string };
+    development: { count: number; sha256: string };
+    sealed: { count: number; sha256: string };
+  };
 }
 
 const args = process.argv.slice(2);
@@ -41,6 +48,20 @@ const cfg = {
   directionThresholdBpsFloor: freeze.features.directionThresholdBpsFloor,
   directionThresholdFixedCostBps: freeze.features.directionThresholdFixedCostBps,
 };
+if (freeze.stateSets) {
+  const sealedIds = portfolioStateIds(assets, ranges.test, cfg, freeze.cadence.decisionEveryBars);
+  const actual = stateSetDigest(sealedIds);
+  if (
+    actual.count !== freeze.stateSets.sealed.count ||
+    actual.sha256 !== freeze.stateSets.sealed.sha256
+  ) {
+    throw new Error(
+      "sealed state-set identity differs from freeze: expected " +
+      freeze.stateSets.sealed.count + "/" + freeze.stateSets.sealed.sha256 +
+      " got " + actual.count + "/" + actual.sha256
+    );
+  }
+}
 
 let states = 0, cached = 0, missing = 0;
 const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
