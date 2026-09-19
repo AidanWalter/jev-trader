@@ -185,12 +185,33 @@ for (let offset = 0; offset < sample.length; offset += concurrency) {
 
 const accuracy = scored.filter((x) => x.choice === x.truth).length / scored.length;
 const mean = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-const subset = (xs: typeof scored) => ({
-  n: xs.length,
-  accuracyPct: xs.length ? xs.filter((x) => x.choice === x.truth).length / xs.length * 100 : null,
-  calledBpsPerState: xs.length ? mean(xs.map((x) => x.calledBps)) : null,
-  netCalledBpsPerState: xs.length ? mean(xs.map((x) => x.netCalledBps)) : null,
-});
+const subset = (xs: typeof scored) => {
+  const symbols = [...new Set(xs.map((x) => x.symbol))];
+  const minTs = xs.length ? Math.min(...xs.map((x) => x.ts)) : 0;
+  const maxTs = xs.length ? Math.max(...xs.map((x) => x.ts)) : 0;
+  const span = Math.max(1, maxTs - minTs + 1);
+  const quartiles = [0, 1, 2, 3].map((q) => {
+    const rows = xs.filter((x) => {
+      const bucket = Math.min(3, Math.floor((x.ts - minTs) / span * 4));
+      return bucket === q;
+    });
+    return rows.length ? mean(rows.map((x) => x.netCalledBps)) : null;
+  });
+  const symbolNets = symbols.map((symbol) => {
+    const rows = xs.filter((x) => x.symbol === symbol);
+    return rows.length ? mean(rows.map((x) => x.netCalledBps)) : null;
+  });
+  return {
+    n: xs.length,
+    accuracyPct: xs.length ? xs.filter((x) => x.choice === x.truth).length / xs.length * 100 : null,
+    calledBpsPerState: xs.length ? mean(xs.map((x) => x.calledBps)) : null,
+    netCalledBpsPerState: xs.length ? mean(xs.map((x) => x.netCalledBps)) : null,
+    positiveTimeQuartiles: quartiles.filter((x) => x !== null && x > 0).length,
+    positiveSymbols: symbolNets.filter((x) => x !== null && x > 0).length,
+    timeQuartileNetBps: quartiles,
+    symbolNetBps: Object.fromEntries(symbols.map((symbol, i) => [symbol, symbolNets[i]])),
+  };
+};
 const sampleMinTs = Math.min(...scored.map((x) => x.ts));
 const sampleMaxTs = Math.max(...scored.map((x) => x.ts));
 const sampleSpan = Math.max(1, sampleMaxTs - sampleMinTs + 1);
