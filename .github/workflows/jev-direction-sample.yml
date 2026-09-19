@@ -11,6 +11,12 @@ on:
         required: true
         type: boolean
         default: false
+      dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the 48-state stage
+        required: true
+      dashboard_input_token_delta:
+        description: TypeSafe input-token increase caused by the 48-state stage
+        required: true
       confirm_spend:
         description: I approve at most 192 fresh requests under a hard $0.017 ledger cap
         required: true
@@ -78,6 +84,23 @@ jobs:
             .budget.estimatedUsd <= 0.004 and
             .metrics.avgInputTokens <= 1600
           ' "$RESULT" >/dev/null
+          OBS_REQ="${{ inputs.dashboard_request_delta }}"
+          OBS_TOK="${{ inputs.dashboard_input_token_delta }}"
+          [[ "$OBS_REQ" =~ ^[0-9]+$ ]]
+          [[ "$OBS_TOK" =~ ^[0-9]+$ ]]
+          EXP_REQ="$(jq -r '.budget.requestsStarted' "$RESULT")"
+          EXP_TOK="$(jq -r '.budget.inputTokens' "$RESULT")"
+          if [ "$OBS_REQ" -ne "$EXP_REQ" ]; then
+            echo "TypeSafe request delta $OBS_REQ does not equal artifact request count $EXP_REQ"
+            exit 1
+          fi
+          LOW=$((EXP_TOK * 95 / 100))
+          HIGH=$((EXP_TOK * 105 / 100 + 100))
+          if [ "$OBS_TOK" -lt "$LOW" ] || [ "$OBS_TOK" -gt "$HIGH" ]; then
+            echo "TypeSafe input-token delta $OBS_TOK does not reconcile with artifact $EXP_TOK (allowed $LOW..$HIGH)"
+            exit 1
+          fi
+          echo "Provider billing reconciled: $OBS_REQ requests and $OBS_TOK input tokens."
           mkdir -p data/sample
           cp -R "$(dirname "$MANIFEST")" data/sample/universe
           cp "$CACHE" data/sample/jev-direction-cache.jsonl
