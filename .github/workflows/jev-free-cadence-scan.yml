@@ -1,0 +1,58 @@
+name: jev-free-cadence-scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/jev-free-cadence-scan.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9c7ae2796ea6c7e01a59522177b150e8c99c34c2
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Download durable fixed market bundle
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-credit-reference-v1
+          path: data/scan
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 35420536540
+      - name: Verify fixed market universe
+        run: |
+          test -s data/scan/universe/universe.json
+          jq -e '
+            .requestedSymbols == ["BTCUSDT","ETHUSDT","SOLUSDT"] and
+            .interval == "1h" and
+            .start == "2024-01-01" and
+            .end == "2026-09-01"
+          ' data/scan/universe/universe.json >/dev/null
+      - name: Development-only perfect-foresight cadence scan
+        run: |
+          set -euo pipefail
+          for CADENCE in 8 12 16 24; do
+            bun run research/oracle-portfolio-bound.ts data/scan/universe/universe.json               --split=dev               --horizons=8,12               --decision-every="$CADENCE"               --top-n=2               --max-gross=1               --max-asset=0.5               --allow-short=false | tee "data/scan/oracle-every-$CADENCE.txt"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-free-cadence-scan-${{ github.run_id }}
+          path: |
+            data/scan/oracle-every-8.txt
+            data/scan/oracle-every-12.txt
+            data/scan/oracle-every-16.txt
+            data/scan/oracle-every-24.txt
+          retention-days: 30
