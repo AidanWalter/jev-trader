@@ -83,6 +83,11 @@ jobs:
                       failures.append(f"{path.name}: automatic trigger forbidden")
                   if not re.search(r"confirm_spend:", text):
                       failures.append(f"{path.name}: explicit spend confirmation missing")
+                  if path.name != "jev-direction-canary.yml":
+                      if "dashboard_request_delta:" not in text:
+                          failures.append(f"{path.name}: provider request-delta reconciliation input missing")
+                      if "dashboard_input_token_delta:" not in text:
+                          failures.append(f"{path.name}: provider input-token reconciliation input missing")
                   if "--max-usd=" not in text:
                       failures.append(f"{path.name}: explicit hard dollar cap missing")
                   if "--concurrency=1" not in text:
