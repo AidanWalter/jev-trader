@@ -1,4 +1,4 @@
-import { BudgetedEvaluator, SpendBudgetLedger } from "./budget";
+import { BudgetedEvaluator, remainingSpendBudget, SpendBudgetLedger } from "./budget";
 import { choosePolicyAction, defaultPolicyConfig } from "./policy";
 import type { FeatureState, JevSignal, SignalEvaluator } from "./types";
 
@@ -101,6 +101,36 @@ try {
   dollarRejected = true;
 }
 check("explicit dollar ceiling independently blocks another request", dollarRejected && dollarInner.calls === 1);
+
+const lifetime = {
+  maxRequests: 12,
+  maxInputTokens: 30_000,
+  maxUsd: 0.002,
+  usdPerMTok: 0.042,
+  reserveTokensPerRequest: 2_000,
+};
+const afterRestart = remainingSpendBudget(lifetime, {
+  requests: 7,
+  inputTokens: 8_400,
+});
+check(
+  "restart budget preserves lifetime request usage",
+  !!afterRestart && afterRestart.maxRequests === 5,
+);
+check(
+  "restart budget preserves lifetime token usage",
+  !!afterRestart && afterRestart.maxInputTokens === 21_600,
+);
+const exhaustedRestart = remainingSpendBudget(lifetime, {
+  requests: 12,
+  inputTokens: 8_400,
+});
+check("restart refuses a state whose lifetime request cap is exhausted", exhaustedRestart === null);
+const dollarExhaustedRestart = remainingSpendBudget(lifetime, {
+  requests: 3,
+  inputTokens: 46_000,
+});
+check("restart refuses a state whose lifetime dollar cap cannot reserve another call", dollarExhaustedRestart === null);
 
 const baseSignal: JevSignal = {
   version: "test",
