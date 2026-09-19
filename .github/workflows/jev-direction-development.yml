@@ -38,7 +38,7 @@ jobs:
       - name: Download exact verified sample artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: jev-direction-sample-canary-*
+          pattern: jev-direction-sample-stage48-*
           path: prior
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -60,8 +60,10 @@ jobs:
             .profile == "lean" and
             .decisionEveryBars == 8 and
             .sampleCount == 240 and
-            .budget.requestsStarted <= 240 and
-            .budget.estimatedUsd <= 0.025 and
+            .preCachedSampleStates >= 48 and
+            .freshStatesRequired <= 192 and
+            .budget.requestsStarted <= 192 and
+            .budget.estimatedUsd <= 0.017 and
             .metrics.avgInputTokens <= 1600 and
             .metrics.brier < 0.6666667 and
             .metrics.nonFlatCount >= 40 and
