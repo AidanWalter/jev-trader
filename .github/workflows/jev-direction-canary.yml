@@ -8,6 +8,23 @@ on:
         required: true
         type: boolean
         default: false
+      resume_run_id:
+        description: Optional failed jev-direction-canary run ID to resume from its partial cache
+        required: false
+        default: ""
+      resume_dashboard_verified:
+        description: I checked TypeSafe billing for the failed canary before resuming
+        required: false
+        type: boolean
+        default: false
+      resume_dashboard_request_delta:
+        description: Exact TypeSafe request-count increase caused by the failed canary
+        required: false
+        default: "0"
+      resume_dashboard_input_token_delta:
+        description: Exact TypeSafe input-token increase caused by the failed canary
+        required: false
+        default: "0"
 
 permissions:
   contents: read
@@ -52,6 +69,51 @@ jobs:
             .cells | any(.profile == "path" and .horizonBars == 8 and .status == "complete")
           ' data/canary/reference-full-jev-summary.json >/dev/null
 
+      - name: Download optional failed canary cache
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jev-direction-canary-failed-${{ inputs.resume_run_id }}
+          path: resume
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Restore partial canary cache and remaining lifetime budget
+        run: |
+          set -euo pipefail
+          MAX_REQ=12
+          MAX_TOK=30000
+          USED_REQ=0
+          USED_TOK=0
+          if [ -n "${{ inputs.resume_run_id }}" ]; then
+            if [ "${{ inputs.resume_dashboard_verified }}" != "true" ]; then
+              echo "Canary resume requires explicit TypeSafe dashboard verification."
+              exit 1
+            fi
+            USED_REQ="${{ inputs.resume_dashboard_request_delta }}"
+            USED_TOK="${{ inputs.resume_dashboard_input_token_delta }}"
+            [[ "$USED_REQ" =~ ^[0-9]+$ ]]
+            [[ "$USED_TOK" =~ ^[0-9]+$ ]]
+            if [ "$USED_REQ" -gt "$MAX_REQ" ] || [ "$USED_TOK" -gt "$MAX_TOK" ]; then
+              echo "Failed canary already exceeded its lifetime cap."
+              exit 1
+            fi
+            PARTIAL="$(find resume -type f -name 'jev-direction-cache.jsonl' -print -quit)"
+            test -n "$PARTIAL"
+            cp "$PARTIAL" data/canary/jev-direction-cache.jsonl
+          fi
+          REM_REQ=$((MAX_REQ - USED_REQ))
+          REM_TOK=$((MAX_TOK - USED_TOK))
+          if [ "$REM_REQ" -le 0 ] || [ "$REM_TOK" -lt 2000 ]; then
+            echo "No safe paid budget remains for this canary."
+            exit 1
+          fi
+          echo "CANARY_REMAINING_REQ=$REM_REQ" >> "$GITHUB_ENV"
+          echo "CANARY_REMAINING_TOK=$REM_TOK" >> "$GITHUB_ENV"
+          echo "Canary lifetime cap remaining: $REM_REQ requests and $REM_TOK input tokens."
+
       - name: Refuse duplicate paid canary
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,8 +142,8 @@ jobs:
             --profile=lean \
             --decision-every=8 \
             --sample=12 \
-            --max-requests=12 \
-            --max-input-tokens=30000 \
+            --max-requests="$CANARY_REMAINING_REQ" \
+            --max-input-tokens="$CANARY_REMAINING_TOK" \
             --reserve-input-tokens=2000 \
             --max-usd=0.0015 \
             --usd-per-mtok=0.042 \
