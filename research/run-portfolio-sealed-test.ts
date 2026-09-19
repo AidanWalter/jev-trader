@@ -8,6 +8,7 @@ import { buildPortfolioFeatureStates } from "./portfolio-features";
 import type { InputProfile } from "./profiles";
 import { replayPortfolio } from "./portfolio";
 import { chronologicalRanges, chronologicalSplit } from "./splits";
+import { portfolioStateIds, stateSetDigest } from "./state-set";
 import type { PolicyConfig } from "./types";
 import { alignUniverse, fingerprintUniverse, loadUniverse } from "./universe";
 
@@ -32,6 +33,12 @@ interface FreezeRecord {
     directionThresholdFixedCostBps: number;
   };
   cadence: { decisionEveryBars: number };
+  stateSets?: {
+    train: { count: number; sha256: string };
+    validation: { count: number; sha256: string };
+    development: { count: number; sha256: string };
+    sealed: { count: number; sha256: string };
+  };
   execution: {
     initialCash: number;
     feeBps: number;
@@ -105,6 +112,18 @@ const sealedFeatureConfig = {
   directionThresholdBpsFloor: freeze.features.directionThresholdBpsFloor,
   directionThresholdFixedCostBps: freeze.features.directionThresholdFixedCostBps,
 };
+if (freeze.stateSets) {
+  const sealedIds = portfolioStateIds(assets, ranges.test, sealedFeatureConfig, freeze.cadence.decisionEveryBars);
+  const actual = stateSetDigest(sealedIds);
+  if (
+    actual.count !== freeze.stateSets.sealed.count ||
+    actual.sha256 !== freeze.stateSets.sealed.sha256
+  ) {
+    throw new Error(
+      "sealed state-set identity differs from freeze; refusing paid evaluation before any Jev call"
+    );
+  }
+}
 const series = assets.map((asset) => ({ symbol: asset.spec.symbol, bars: asset.bars }));
 const sealedStart = Math.max(sealedFeatureConfig.minHistoryBars, ranges.test.start);
 const sealedEnd = ranges.test.end - freeze.features.horizonBars - 1;
