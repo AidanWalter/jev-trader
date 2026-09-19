@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { CachedEvaluator, JsonlSignalCache } from "./cache";
-import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetLedger } from "./budget";
+import { BudgetedEvaluator, defaultSpendBudget, SpendBudgetExceededError, SpendBudgetLedger } from "./budget";
 import { createReplayEvaluator } from "./evaluator";
 import { defaultFeatureConfig } from "./features";
 import { buildPortfolioFeatureStates } from "./portfolio-features";
@@ -534,7 +534,16 @@ while (cycles === 0 || cycle < cycles) {
       );
     }
   } catch (e) {
-    console.error("frozen portfolio paper loop:", (e as Error).message);
+    const error = e as Error;
+    const message = error.message ?? String(e);
+    console.error("frozen portfolio paper loop:", message);
+    if (
+      e instanceof SpendBudgetExceededError ||
+      (paidModel && /(^|\D)402(\D|$)|no available api credits|payment required/i.test(message))
+    ) {
+      console.error("paid Jev live paper stopped before any further provider call");
+      break;
+    }
   }
 
   if (cycles !== 0 && cycle >= cycles) break;
