@@ -82,7 +82,22 @@ jobs:
             .freshStatesRequired <= 36 and
             .budget.requestsStarted <= 36 and
             .budget.estimatedUsd <= 0.004 and
-            .metrics.avgInputTokens <= 1600
+            .metrics.avgInputTokens <= 1600 and
+            .metrics.brier < 0.80 and
+            .metrics.nonFlatCount >= 8 and
+            (
+              .metrics.calledBpsPerState > 0 or
+              (.metrics.confidenceGates | any(
+                .n >= 8 and
+                .netCalledBpsPerState > 0 and
+                .positiveSymbols >= 2
+              )) or
+              (.metrics.edgeGates | any(
+                .n >= 8 and
+                .netCalledBpsPerState > 0 and
+                .positiveSymbols >= 2
+              ))
+            )
           ' "$RESULT" >/dev/null
           OBS_REQ="${{ inputs.dashboard_request_delta }}"
           OBS_TOK="${{ inputs.dashboard_input_token_delta }}"
