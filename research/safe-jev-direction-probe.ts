@@ -191,20 +191,38 @@ const subset = (xs: typeof scored) => ({
   calledBpsPerState: xs.length ? mean(xs.map((x) => x.calledBps)) : null,
   netCalledBpsPerState: xs.length ? mean(xs.map((x) => x.netCalledBps)) : null,
 });
+const sampleMinTs = Math.min(...scored.map((x) => x.ts));
+const sampleMaxTs = Math.max(...scored.map((x) => x.ts));
+const sampleSpan = Math.max(1, sampleMaxTs - sampleMinTs + 1);
+const timeQuartile = (ts: number) =>
+  Math.min(3, Math.max(0, Math.floor((ts - sampleMinTs) / sampleSpan * 4)));
+const robustness = (xs: typeof scored) => {
+  const quartiles = Array.from({ length: 4 }, (_, q) => subset(xs.filter((x) => timeQuartile(x.ts) === q)));
+  const symbols = assets.map((asset) => ({
+    symbol: asset.spec.symbol,
+    ...subset(xs.filter((x) => x.symbol === asset.spec.symbol)),
+  }));
+  return {
+    positiveTimeQuartiles: quartiles.filter((x) => x.n >= 3 && Number(x.netCalledBpsPerState) > 0).length,
+    positiveSymbols: symbols.filter((x) => x.n >= 3 && Number(x.netCalledBpsPerState) > 0).length,
+    timeQuartiles: quartiles,
+    symbols,
+  };
+};
 const nonFlatRows = scored.filter((x) => x.choice !== "flat");
 const byChoice = {
   long: subset(scored.filter((x) => x.choice === "long")),
   short: subset(scored.filter((x) => x.choice === "short")),
   flat: subset(scored.filter((x) => x.choice === "flat")),
 };
-const confidenceGates = [0.45, 0.50, 0.55, 0.60, 0.65].map((threshold) => ({
-  threshold,
-  ...subset(nonFlatRows.filter((x) => x.confidence >= threshold)),
-}));
-const edgeGates = [0.10, 0.20, 0.30, 0.40, 0.50].map((threshold) => ({
-  threshold,
-  ...subset(nonFlatRows.filter((x) => x.directionalEdge >= threshold)),
-}));
+const confidenceGates = [0.45, 0.50, 0.55, 0.60, 0.65].map((threshold) => {
+  const rows = nonFlatRows.filter((x) => x.confidence >= threshold);
+  return { threshold, ...subset(rows), ...robustness(rows) };
+});
+const edgeGates = [0.10, 0.20, 0.30, 0.40, 0.50].map((threshold) => {
+  const rows = nonFlatRows.filter((x) => x.directionalEdge >= threshold);
+  return { threshold, ...subset(rows), ...robustness(rows) };
+});
 const result = {
   version: "safe-jev-direction-probe-v1",
   createdAt: Date.now(),
@@ -252,6 +270,7 @@ const result = {
       : null,
     nonFlatCount: nonFlatRows.length,
     byChoice,
+    overallRobustness: robustness(nonFlatRows),
     confidenceGates,
     edgeGates,
   },
@@ -278,7 +297,11 @@ for (const gate of confidenceGates) {
     "confidence >= " + gate.threshold.toFixed(2) +
     " · n " + gate.n +
     " · net " + gate.netCalledBpsPerState!.toFixed(2) + " bps/state" +
-    " · acc " + gate.accuracyPct!.toFixed(1) + "%"
+    " · acc " + gate.accuracyPct!.toFixed(1) + "%" +
+    " · positive quartiles " + gate.positiveTimeQuartiles + "/4" +
+    " · positive symbols " + gate.positiveSymbols + "/" + assets.length +
+    " · positive quartiles " + gate.positiveTimeQuartiles + "/4" +
+    " · positive symbols " + gate.positiveSymbols + "/" + assets.length
   );
 }
 for (const gate of edgeGates) {
