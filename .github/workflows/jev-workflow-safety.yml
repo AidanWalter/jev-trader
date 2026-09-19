@@ -70,6 +70,18 @@ jobs:
               ],
           }
           failures = []
+          staged_caps = {
+              "jev-direction-canary.yml": (12, 0.0015),
+              "jev-direction-sample-48.yml": (36, 0.004),
+              "jev-direction-sample.yml": (192, 0.017),
+              "jev-direction-sample-1000.yml": (760, 0.065),
+              "jev-direction-development.yml": (5996, 0.505),
+              "jev-direction-sealed.yml": (1000, 0.09),
+          }
+          if sum(v[0] for v in staged_caps.values()) != 7996:
+              failures.append("staged paid request ceiling changed from 7,996")
+          if sum(v[1] for v in staged_caps.values()) > 0.70:
+              failures.append("staged paid research dollar ceiling exceeds $0.70")
           disabled_guard = "if: $" + "{{ false }}"
           duplicate_disabled_guard = disabled_guard + "\n    if:"
 
