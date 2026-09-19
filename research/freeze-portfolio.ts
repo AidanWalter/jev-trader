@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { assertResearchDataQuality } from "./data-quality";
-import { chronologicalSplit } from "./splits";
+import { chronologicalRanges, chronologicalSplit } from "./splits";
 import { alignUniverse, fingerprintUniverse, loadUniverse } from "./universe";
+import { portfolioStateIds, stateSetDigest } from "./state-set";
 import type { PolicyConfig } from "./types";
 import type { InputProfile } from "./profiles";
 
@@ -69,6 +70,17 @@ const assets = alignUniverse(rawAssets);
 const bars = assets[0]!.bars;
 const split = chronologicalSplit(bars);
 if (!split.test.length) throw new Error("portfolio universe has no sealed test bars");
+const ranges = chronologicalRanges(bars);
+const frozenCadence = selection.chosen.decisionEveryBars ?? selection.decisionEveryBars;
+const frozenFeatureConfig = {
+  horizonBars: selection.chosen.horizonBars,
+  directionThresholdBpsFloor: selection.features.directionThresholdBpsFloor,
+  directionThresholdFixedCostBps: selection.features.directionThresholdFixedCostBps,
+  spreadBpsFallback: selection.execution.spreadBpsFallback,
+};
+const trainStateIds = portfolioStateIds(assets, ranges.train, frozenFeatureConfig, frozenCadence);
+const validationStateIds = portfolioStateIds(assets, ranges.validation, frozenFeatureConfig, frozenCadence);
+const testStateIds = portfolioStateIds(assets, ranges.test, frozenFeatureConfig, frozenCadence);
 
 const record = {
   version: "portfolio-apparatus-freeze-v1",
@@ -104,7 +116,13 @@ const record = {
     directionThresholdFixedCostBps: selection.features.directionThresholdFixedCostBps,
   },
   cadence: {
-    decisionEveryBars: selection.chosen.decisionEveryBars ?? selection.decisionEveryBars,
+    decisionEveryBars: frozenCadence,
+  },
+  stateSets: {
+    train: stateSetDigest(trainStateIds),
+    validation: stateSetDigest(validationStateIds),
+    development: stateSetDigest([...trainStateIds, ...validationStateIds]),
+    sealed: stateSetDigest(testStateIds),
   },
   execution: {
     initialCash: Number(flag("cash", "100")),
